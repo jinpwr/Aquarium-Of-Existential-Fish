@@ -48,7 +48,7 @@
 <body>
   <div id="dither"></div>
   <div id="overlay">
-    <div class="hint">Move mouse: parallax · Click fish: freeze/vanish · Press <kbd>H</kbd>: hide bubbles</div>
+    <div class="hint">Click anywhere: the fish get scared and dart away</div>
     <div class="title">Aquarium of Existential Fish</div>
   </div>
 
@@ -61,19 +61,20 @@
 
     const camera = new THREE.PerspectiveCamera(65, innerWidth/innerHeight, 0.1, 100);
     camera.position.set(0, 2.2, 7);
+    camera.lookAt(0,0,0);
 
     // Transparent renderer so CSS background shows through
     const renderer = new THREE.WebGLRenderer({
       antialias: true,
-      alpha: true,              // key: allow background through
-      premultipliedAlpha: false // crisper blending
+      alpha: true,
+      premultipliedAlpha: false
     });
     renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     renderer.setSize(innerWidth, innerHeight);
     renderer.setClearColor(0x000000, 0); // fully transparent
     document.body.appendChild(renderer.domElement);
 
-    // Lighting
+    // Lighting (soft & cute)
     const amb = new THREE.AmbientLight(0x88caff, 0.35); scene.add(amb);
     const key = new THREE.PointLight(0x3bc2ff, 11, 40, 2.2); key.position.set(6, 4, 3); scene.add(key);
     const fill = new THREE.PointLight(0x44ffb8, 6, 40, 2.2); fill.position.set(-6, -1, -2); scene.add(fill);
@@ -87,7 +88,48 @@
       '404: meaning not found','blink slowly','pretend to be water','becoming … becoming','a small thought floats'
     ];
 
-    // Bubble sprites
+    // ---------- Cute fish assets ----------
+    // Gradient texture for cute paper-fish
+    function makeGradientTexture() {
+      const c = document.createElement('canvas');
+      c.width = 256; c.height = 256;
+      const ctx = c.getContext('2d');
+
+      const g = ctx.createLinearGradient(0, 0, 256, 256);
+      g.addColorStop(0.00, '#021018');
+      g.addColorStop(0.25, '#00ffd5');
+      g.addColorStop(0.55, '#ff6a6a');
+      g.addColorStop(0.75, '#ffd86b');
+      g.addColorStop(1.00, '#120012');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, 256, 256);
+
+      const vg = ctx.createRadialGradient(128,128,40, 128,128,140);
+      vg.addColorStop(0,'rgba(0,0,0,0)');
+      vg.addColorStop(1,'rgba(0,0,0,0.25)');
+      ctx.fillStyle = vg; ctx.fillRect(0,0,256,256);
+
+      const tex = new THREE.CanvasTexture(c);
+      tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+      tex.magFilter = THREE.LinearFilter;
+      tex.minFilter = THREE.LinearMipmapLinearFilter;
+      return tex;
+    }
+
+    // Eye sprite
+    function makeEyeSprite() {
+      const s = 64;
+      const c = document.createElement('canvas'); c.width = c.height = s;
+      const ctx = c.getContext('2d');
+      ctx.clearRect(0,0,s,s);
+      ctx.fillStyle = 'white';
+      ctx.beginPath(); ctx.arc(s/2, s/2, s*0.42, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#1c1b22';
+      ctx.beginPath(); ctx.arc(s*0.6, s*0.53, s*0.12, 0, Math.PI*2); ctx.fill();
+      const tex = new THREE.CanvasTexture(c);
+      return new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+    }
+
+    // Speech bubble sprite
     function makeBubbleSprite(text){
       const w = 256, h = 128;
       const cvs = document.createElement('canvas'); cvs.width = w; cvs.height = h;
@@ -144,138 +186,161 @@
       for (const l of lines){ ctx.fillText(l, x, curY); curY += lineHeight; }
     }
 
-    // Fish mesh
-    function makeFishMesh(){
-      const g = new THREE.Group();
-      const bodyGeo = new THREE.IcosahedronGeometry(rand(0.25,0.38), 0);
-      bodyGeo.scale(rand(1.6,2.1), 1, 1);
-      const bodyMat = new THREE.MeshStandardMaterial({
-        color: new THREE.Color().setHSL(Math.random(), 0.6, 0.5),
-        roughness: 0.8, metalness: 0.05, flatShading: true
-      });
-      const body = new THREE.Mesh(bodyGeo, bodyMat); g.add(body);
+    // Cute, flat, origami-style fish
+    function makeCuteFishMesh() {
+      const group = new THREE.Group();
+      const tex = makeGradientTexture();
 
-      const tailGeo = new THREE.ConeGeometry(0.2, 0.35, 3);
-      tailGeo.rotateZ(Math.PI/2);
-      tailGeo.translate(-bodyGeo.parameters.radius*1.1, 0, 0);
-      const tail = new THREE.Mesh(tailGeo, bodyMat.clone());
-      tail.material.color.offsetHSL(0, 0, -0.08);
-      g.add(tail);
+      // Body shape (flat diamond with pointy head to +X)
+      const bodyShape = new THREE.Shape();
+      bodyShape.moveTo(-0.55, 0);
+      bodyShape.lineTo(0.05, 0.28);
+      bodyShape.lineTo(0.62, 0.02);
+      bodyShape.lineTo(0.05, -0.26);
+      bodyShape.lineTo(-0.55, 0);
 
-      const finGeo = new THREE.ConeGeometry(0.08, 0.18, 3);
-      const finL = new THREE.Mesh(finGeo, bodyMat.clone());
-      const finR = new THREE.Mesh(finGeo, bodyMat.clone());
-      finL.position.set(0.1, -0.1, 0.18); finL.rotation.z = -Math.PI/3;
-      finR.position.set(0.1, -0.1, -0.18); finR.rotation.z = -Math.PI/3; finR.rotation.y = Math.PI;
-      g.add(finL, finR);
+      const bodyGeo = new THREE.ShapeGeometry(bodyShape);
+      const bodyMat = new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide, transparent: true });
+      const body = new THREE.Mesh(bodyGeo, bodyMat);
+      body.rotation.y = Math.PI; // face +X like our movement math
+      group.add(body);
 
-      const eyeGeo = new THREE.SphereGeometry(0.04, 6, 6);
-      const eyeMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-      const eyeL = new THREE.Mesh(eyeGeo, eyeMat);
-      const eyeR = new THREE.Mesh(eyeGeo, eyeMat);
-      eyeL.position.set(0.4, 0.06, 0.12); eyeR.position.set(0.4, 0.06, -0.12);
-      g.add(eyeL, eyeR);
+      // Dorsal fin (triangle)
+      const finTopGeo = new THREE.BufferGeometry();
+      finTopGeo.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array([
+        0.00, 0.28, 0.001,
+        0.28, 0.50, 0.001,
+        0.18, 0.15, 0.001,
+      ]), 3));
+      const finTop = new THREE.Mesh(finTopGeo, new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide, transparent: true }));
+      group.add(finTop);
 
-      return g;
+      // Tail fin (triangle)
+      const tailGeo = new THREE.BufferGeometry();
+      tailGeo.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array([
+        -0.55,  0.00, -0.001,
+        -0.95,  0.22, -0.001,
+        -0.95, -0.22, -0.001,
+      ]), 3));
+      const tail = new THREE.Mesh(tailGeo, new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide, transparent: true }));
+      group.add(tail);
+
+      // Outline (subtle sticker vibe)
+      const outlineMat = new THREE.LineBasicMaterial({ color: 0xffffff, opacity: 0.25, transparent: true });
+      const pts = bodyShape.getPoints(16).map(p => new THREE.Vector3(p.x, p.y, 0.002));
+      const outlineGeo = new THREE.BufferGeometry().setFromPoints(pts.concat([pts[0]]));
+      const outline = new THREE.Line(outlineGeo, outlineMat);
+      group.add(outline);
+
+      // Eye
+      const eye = makeEyeSprite();
+      eye.scale.set(0.22, 0.22, 1);
+      eye.position.set(0.38, 0.05, 0.01);
+      group.add(eye);
+
+      // tiny tilt for light
+      group.rotation.z = THREE.MathUtils.degToRad(0.5);
+
+      return group;
     }
 
-    // Fish entity
+    // ---------- Fish entity ----------
     class Fish {
       constructor(){
         this.group = new THREE.Group();
-        this.mesh = makeFishMesh();
+        this.mesh = makeCuteFishMesh();
         this.group.add(this.mesh);
         this.bubble = makeBubbleSprite(choose(PHRASES));
         this.bubble.position.set(0, 0.9, 0);
         this.group.add(this.bubble);
 
         this.group.position.set(rand(-4,4), rand(-1.2,2.2), rand(-2.5,2.5));
+
         this.vel = new THREE.Vector3(rand(-0.02,0.02), rand(-0.01,0.01), rand(-0.015,0.015));
         this.turn = new THREE.Vector3(rand(-0.001,0.001), rand(-0.001,0.001), rand(-0.001,0.001));
-        this.speed = rand(0.003, 0.018);
-        this.frozen = false;
-        this.dead = false;
-        this.bubbleVisible = true;
+        this.speed = rand(0.003, 0.012);
+
+        this.impulse = new THREE.Vector3();  // scare burst accumulates here
+        this.scaredTimer = 0;                // seconds remaining of heightened speed
+
         scene.add(this.group);
       }
-      update(dt){
-        if (this.dead) return;
-        if (!this.frozen){
-          this.vel.x += this.turn.x * dt; this.vel.y += this.turn.y * dt; this.vel.z += this.turn.z * dt;
-          this.vel.clampLength(0, this.speed);
-          this.group.position.addScaledVector(this.vel, dt * 60);
-          const p = this.group.position;
-          if (p.x < -6 || p.x > 6) this.vel.x *= -1;
-          if (p.y < -3 || p.y > 3) this.vel.y *= -1;
-          if (p.z < -4 || p.z > 4) this.vel.z *= -1;
 
-          const dir = this.vel.clone().normalize();
-          if (dir.lengthSq() > 0.0001){
-            const targetQuat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1,0,0), dir);
-            this.group.quaternion.slerp(targetQuat, 0.08);
-          }
-          // Wiggle fins
-          this.mesh.children.forEach((c)=>{ if(c.geometry && c.geometry.type === 'ConeGeometry'){ c.rotation.y += 0.04; }});
-        }
+      update(dt){
+        // gentle wandering
+        this.vel.x += this.turn.x * dt;
+        this.vel.y += this.turn.y * dt;
+        this.vel.z += this.turn.z * dt;
+
+        // add impulse and decay it
+        this.vel.addScaledVector(this.impulse, 1);
+        this.impulse.multiplyScalar(Math.pow(0.85, dt * 60)); // fast decay
+
+        // speed boost while scared
+        const maxSpeed = this.scaredTimer > 0 ? 0.06 : this.speed;
+        this.vel.clampLength(0, maxSpeed);
+
+        // integrate
+        this.group.position.addScaledVector(this.vel, dt * 60);
+
+        // soft bounds
+        const p = this.group.position;
+        if (p.x < -6 || p.x > 6) this.vel.x *= -1;
+        if (p.y < -3 || p.y > 3) this.vel.y *= -1;
+        if (p.z < -4 || p.z > 4) this.vel.z *= -1;
+
+        // face velocity (flat fish rotates around Z based on XY velocity)
+        const dir2 = Math.atan2(this.vel.y, this.vel.x);
+        if (isFinite(dir2)) this.group.rotation.z = dir2 * 0 + this.group.rotation.z; // keep tiny tilt
+        // yaw towards direction so it “points” where it swims
+        this.group.rotation.y = (this.vel.x >= 0 ? Math.PI : 0);
+
+        // billboard bubble
         this.bubble.lookAt(camera.position);
+
+        // reduce scared timer
+        if (this.scaredTimer > 0) this.scaredTimer -= dt;
       }
-      toggleFreeze(){ this.frozen = !this.frozen; }
-      vanish(){
-        this.dead = true;
-        const mats = [];
-        this.mesh.traverse(o=>{ if(o.material) mats.push(o.material); });
-        let a = 1;
-        const fade = ()=>{
-          a -= 0.03;
-          mats.forEach(m=>{ m.transparent = true; m.opacity = Math.max(a,0); });
-          this.bubble.material.opacity = Math.max(a,0);
-          if (a > 0) requestAnimationFrame(fade); else scene.remove(this.group);
-        };
-        fade();
+
+      scareFrom(point){ // point is world position
+        const away = this.group.position.clone().sub(point);
+        away.z = 0; // keep mostly planar
+        const len = away.length() || 1;
+        away.divideScalar(len); // normalize
+        // impulse strength falls off with distance
+        const falloff = Math.min(1, 1 / Math.max(0.2, len * 0.4));
+        const strength = 0.18 * falloff * (0.8 + Math.random()*0.4);
+        this.impulse.addScaledVector(away, strength);
+        this.scaredTimer = 1.2 + Math.random()*0.6;
+        updateBubbleText(this.bubble, choose(['!','eep','zoom','not today','away!','no thoughts']));
       }
-      randomThought(){ updateBubbleText(this.bubble, choose(PHRASES)); }
-      setBubblesVisible(v){ this.bubble.visible = v; this.bubbleVisible = v; }
     }
 
-    // School
+    // Make a school
     const FISH = [];
-    for (let i=0; i<18; i++) FISH.push(new Fish());
+    for (let i=0; i<20; i++) FISH.push(new Fish());
 
+    // Occasional new thoughts (no user input required)
     setInterval(()=>{
-      const f = choose(FISH.filter(f=>!f.dead));
-      if (f) f.randomThought();
-    }, 1800);
+      const f = choose(FISH);
+      if (f) updateBubbleText(f.bubble, choose(PHRASES));
+    }, 2200);
 
-    // Interaction
+    // ---------- New interaction: click to scare (no other interactions) ----------
     const ray = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
+    const plane = new THREE.Plane(new THREE.Vector3(0,0,1), 0); // z = 0 plane
+    const hitPoint = new THREE.Vector3();
 
-    function onClick(e){
+    addEventListener('click', (e)=>{
       mouse.x = (e.clientX / innerWidth) * 2 - 1;
       mouse.y = -(e.clientY / innerHeight) * 2 + 1;
       ray.setFromCamera(mouse, camera);
-      const hits = ray.intersectObjects(FISH.map(f=>f.mesh), true);
-      if (!hits.length) return;
-      const hit = hits[0].object;
-      const fish = FISH.find(f=>{ let found=false; f.mesh.traverse(o=>{ if(o===hit) found=true; }); return found; });
-      if (!fish || fish.dead) return;
-      if (!fish.frozen){ fish.toggleFreeze(); updateBubbleText(fish.bubble, 'i will remember this'); }
-      else { fish.vanish(); }
-    }
-    addEventListener('click', onClick);
-
-    addEventListener('keydown', (e)=>{
-      if (e.key.toLowerCase() === 'h'){
-        const anyVisible = FISH.some(f=>f.bubbleVisible);
-        FISH.forEach(f=>f.setBubblesVisible(!anyVisible));
-      }
-    });
-
-    // Parallax camera
-    let targetOffset = new THREE.Vector2(0,0);
-    addEventListener('mousemove', (e)=>{
-      targetOffset.x = (e.clientX / innerWidth - 0.5) * 0.9;
-      targetOffset.y = (e.clientY / innerHeight - 0.5) * 0.6;
+      // Convert click to world space on z=0 plane
+      ray.intersectPlane(plane, hitPoint);
+      if (!isFinite(hitPoint.x)) return;
+      // Scare all fish away from click point
+      for (const f of FISH) f.scareFrom(hitPoint);
     });
 
     // Resize
@@ -288,9 +353,6 @@
     let last = performance.now();
     function tick(now){
       const dt = Math.min((now-last)/1000, 0.05); last = now;
-      camera.position.x += (targetOffset.x - camera.position.x) * 0.04;
-      camera.position.y += (2.2 + targetOffset.y - camera.position.y) * 0.04;
-      camera.lookAt(0,0,0);
       for (const f of FISH) f.update(dt);
       renderer.render(scene, camera);
       requestAnimationFrame(tick);
