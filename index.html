@@ -5,13 +5,34 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Aquarium of Existential Fish</title>
   <style>
-    html, body { height: 100%; margin: 0; background: #0a0a0a; overflow: hidden; }
+    html, body {
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      /* Vaporwave abyss animated gradient */
+      background: linear-gradient(-45deg, #0b0016, #2b0040, #ff71ce, #01cdfe, #b967ff, #0b0016);
+      background-size: 400% 400%;
+      animation: gradientShift 40s ease infinite;
+    }
+    @keyframes gradientShift {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+    /* Pixel-dither overlay */
+    #dither { 
+      position: fixed; inset: 0; pointer-events: none; opacity: .15; 
+      background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" fill="black" opacity="0"/><rect x="0" y="0" width="2" height="2" fill="white" opacity="0.07"/><rect x="2" y="2" width="2" height="2" fill="white" opacity="0.07"/></svg>');
+      image-rendering: pixelated; background-size: 4px; background-repeat: repeat; 
+      mix-blend-mode: overlay; 
+    }
     #overlay { position: fixed; inset: 0; pointer-events: none; display: flex; align-items: flex-end; justify-content: space-between; padding: 12px 14px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: #b3f4ff; }
     #overlay .hint { opacity: .8; font-size: 12px; }
     #overlay .title { margin-left: auto; font-weight: 700; letter-spacing: .5px; font-size: 12px; color: #9effc7; }
   </style>
 </head>
 <body>
+  <div id="dither"></div>
   <div id="overlay">
     <div class="hint">Move mouse: camera parallax · Click fish: freeze/vanish · Press <kbd>H</kbd>: hide bubbles</div>
     <div class="title">Aquarium of Existential Fish</div>
@@ -21,7 +42,7 @@
 
     // --- Scene / Camera / Renderer ---
     const scene = new THREE.Scene();
-    scene.fog = new THREE.FogExp2(0x02070b, 0.08);
+    scene.fog = new THREE.FogExp2(0x0b0016, 0.06);
 
     const camera = new THREE.PerspectiveCamera(65, innerWidth/innerHeight, 0.1, 100);
     camera.position.set(0, 2.2, 7);
@@ -29,7 +50,7 @@
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
     renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     renderer.setSize(innerWidth, innerHeight);
-    renderer.setClearColor(0x02070b, 1);
+    renderer.setClearColor(0x0b0016, 1);
     document.body.appendChild(renderer.domElement);
 
     // Lighting: soft, underwater-ish
