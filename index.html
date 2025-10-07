@@ -3,17 +3,15 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Aquarium of Existential Fish — Rebuild</title>
+  <title>Aquarium of Existential Fish — Debug Build</title>
   <style>
     html, body { height: 100%; margin: 0; overflow: hidden; }
-    /* Vaporwave abyss gradient with subtle pixel-ish dither overlay */
     body {
       background:
         radial-gradient(1200px 800px at 70% 30%, rgba(255, 0, 255, 0.2), transparent 60%),
         radial-gradient(1000px 700px at 20% 80%, rgba(0, 255, 255, 0.15), transparent 60%),
         linear-gradient(180deg, #0b0b1a, #1a0f2e 40%, #051018 80%, #000);
     }
-    /* Faux dither: tiny checker that subtly bands the gradient */
     body:before {
       content: "";
       position: fixed; inset: 0;
@@ -25,8 +23,11 @@
     }
     #app { position: fixed; inset: 0; }
     .hud {
-      position: fixed; left: 16px; bottom: 16px; color: #e6dcff; font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; opacity: .9;
-      background: rgba(10,10,20,.35); backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,.1); border-radius: 10px; padding: 10px 12px;
+      position: fixed; left: 16px; bottom: 16px;
+      color: #e6dcff; font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      opacity: .9;
+      background: rgba(10,10,20,.35); backdrop-filter: blur(6px);
+      border: 1px solid rgba(255,255,255,.1); border-radius: 10px; padding: 10px 12px;
     }
     .hud kbd { padding: 2px 5px; border-radius: 6px; border: 1px solid rgba(255,255,255,.2); background: rgba(255,255,255,.05); }
     .hud a { color: #c9f; text-decoration: none; }
@@ -35,11 +36,10 @@
 <body>
   <div id="app"></div>
   <div class="hud">
-    <div><strong>Aquarium of Existential Fish</strong> — GLB/Three.js</div>
-    <div>• Click <kbd>fish</kbd> → it plays its <em>death</em> animation; others flee.</div>
-    <div>• Click <kbd>water</kbd> → all fish flee from the click point.</div>
-    <div>• Drag to orbit; <kbd>double‑click</kbd> empty water to recentre camera.</div>
-    <div>• Replace <code>models/fish.glb</code> with your Sketchfab model path.</div>
+    <div><strong>Aquarium of Existential Fish</strong> — Debug Build</div>
+    <div>• Click <kbd>fish</kbd> → plays death animation; others flee.</div>
+    <div>• Click <kbd>water</kbd> → all fish flee from that point.</div>
+    <div>• Drag to orbit; <kbd>dbl-click</kbd> empty space to recenter camera.</div>
   </div>
 
   <script type="module">
@@ -48,29 +48,16 @@
     import { GLTFLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders/GLTFLoader.js';
     import { SkeletonUtils } from 'https://unpkg.com/three@0.160.0/examples/jsm/utils/SkeletonUtils.js';
 
-    // --------- Config ---------
-    const MODEL_URL = 'models/fish.glb'; // <-- put your Sketchfab GLB here
+    // -------- CONFIG --------
+    const MODEL_URL = 'models/fish.glb';
     const FISH_COUNT = 12;
-    const AQUARIUM_BOUNDS = new THREE.Vector3(20, 10, 20); // +/- bounds in xyz
-    const BASE_SPEED = 0.8;        // base cruising speed
-    const FLEE_IMPULSE = 6.0;      // strength when scared
-    const FLEE_DECAY = 1.6;        // how quickly fear velocity fades (per second)
-    const TURN_RATE = 1.5;         // how quickly fish turn toward heading
-    const DEBUG = true;            // <--- turn on helpers while we debug visibility
+    const DEBUG = true;
 
-    // Animation name hints (fallbacks will be auto-detected if names differ)
-    const ANIM_HINTS = {
-      swim: ['swim', 'idle', 'swimming', 'loop'],
-      bite: ['bite', 'attack', 'peck'],
-      death: ['death', 'die']
-    };
-
-    // --------- Scene setup ---------
+    // Scene setup
     const app = document.getElementById('app');
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.shadowMap.enabled = false;
     app.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
@@ -82,36 +69,11 @@
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
-    controls.dampingFactor = 0.06;
-    controls.enablePan = false;
 
-    // Lights: soft abyssal
     const hemi = new THREE.HemisphereLight(0x9bb8ff, 0x090515, 1.1);
-    scene.add(hemi);
     const dir = new THREE.DirectionalLight(0xffa6f7, 0.9);
     dir.position.set(-6, 10, 6);
-    dir.castShadow = false;
-    scene.add(dir);
-
-    // Invisible water plane for raycasting click positions
-    const waterGeo = new THREE.PlaneGeometry(200, 200, 1, 1);
-    const waterMat = new THREE.MeshBasicMaterial({ visible: false });
-    const water = new THREE.Mesh(waterGeo, waterMat);
-    water.rotation.x = -Math.PI / 2; // horizontal plane at y=0
-    scene.add(water);
-
-    // Decorative: faint bloom sprites (optional, lightweight)
-    const starGeo = new THREE.BufferGeometry();
-    const starCount = 2000;
-    const positions = new Float32Array(starCount * 3);
-    for (let i = 0; i < starCount; i++) {
-      positions[i*3 + 0] = (Math.random() - 0.5) * 80;
-      positions[i*3 + 1] = Math.random() * 30 - 5;
-      positions[i*3 + 2] = (Math.random() - 0.5) * 80;
-    }
-    starGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    const starMat = new THREE.PointsMaterial({ size: 0.06, transparent: true, opacity: 0.35 });
-    scene.add(new THREE.Points(starGeo, starMat));
+    scene.add(hemi, dir);
 
     // Debug axes
     if (DEBUG) {
@@ -120,305 +82,71 @@
       scene.add(axes);
     }
 
-    // Raycaster
-    const raycaster = new THREE.Raycaster();
-    const mouse = new THREE.Vector2();
-
-    // Clock
+    // Clock + containers
     const clock = new THREE.Clock();
-
-    // Fish registry for click testing
     const fishList = [];
-    const clickable = []; // meshes to test for raycast hits
 
-    // --------- Helpers ---------
-    function findClip(clips, keywords) {
-      if (!clips || !clips.length) return null;
-      const lower = clips.map(c => ({ c, name: (c.name || '').toLowerCase() }));
-      for (const key of keywords) {
-        const hit = lower.find(o => o.name.includes(key));
-        if (hit) return hit.c;
-      }
-      return null;
-    }
-
-    // Center the model at origin and scale it to a target bounding-box size (so huge models don't vanish)
-    function centerAndScale(object3D, targetSize = 1.6) {
-      const bbox = new THREE.Box3().setFromObject(object3D);
+    // Helper: center + scale model
+    function centerAndScale(object, targetSize = 2) {
+      const box = new THREE.Box3().setFromObject(object);
       const size = new THREE.Vector3();
-      bbox.getSize(size);
-      const maxDim = Math.max(size.x, size.y, size.z) || 1;
-      const scale = targetSize / maxDim;
-      object3D.scale.setScalar(scale);
-
-      // Recompute after scaling, then center to origin so our fish spawns nicely
-      const bbox2 = new THREE.Box3().setFromObject(object3D);
+      box.getSize(size);
+      const maxDim = Math.max(size.x, size.y, size.z);
+      const scale = targetSize / (maxDim || 1);
+      object.scale.setScalar(scale);
+      const box2 = new THREE.Box3().setFromObject(object);
       const center = new THREE.Vector3();
-      bbox2.getCenter(center);
-      object3D.position.sub(center); // move so its center is near (0,0,0)
-
+      box2.getCenter(center);
+      object.position.sub(center);
       return scale;
     }
 
-    function autoClips(clips) {
-      const death = findClip(clips, ANIM_HINTS.death) || clips.find(c => /death|die/i.test(c.name));
-      // Prefer a non-death clip for swim; if only one clip exists, we still use it as loop.
-      const swim = findClip(clips, ANIM_HINTS.swim) || clips.find(c => c !== death);
-      const bite = findClip(clips, ANIM_HINTS.bite);
-      return { swim, bite, death };
-    }
-
-    function randInRange(min, max) { return Math.random() * (max - min) + min; }
-
-    // --------- Fish class ---------
     class Fish {
-      constructor(template, clips) {
+      constructor(template) {
         this.root = SkeletonUtils.clone(template);
-        this.root.traverse(o => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; clickable.push(o); } });
         scene.add(this.root);
-
-        // Debug: visualize bounds
         if (DEBUG) {
           const bbox = new THREE.Box3().setFromObject(this.root);
           const helper = new THREE.Box3Helper(bbox, 0x66ff88);
           this.root.add(helper);
-          console.log('Spawned fish, bbox size:', bbox.getSize(new THREE.Vector3()));
         }
-
-        this.mixer = new THREE.AnimationMixer(this.root);
-        const { swim, bite, death } = autoClips(clips);
-        this.clips = { swim, bite, death };
-
-        this.actions = {};
-        if (swim) { this.actions.swim = this.mixer.clipAction(swim); this.actions.swim.setLoop(THREE.LoopRepeat); this.actions.swim.play(); }
-        if (bite) { this.actions.bite = this.mixer.clipAction(bite); }
-        if (death) { this.actions.death = this.mixer.clipAction(death); this.actions.death.setLoop(THREE.LoopOnce); this.actions.death.clampWhenFinished = true; }
-
-        this.isDead = false;
-        this.heading = new THREE.Vector3(randInRange(-1,1), randInRange(-0.15,0.15), randInRange(-1,1)).normalize();
-        this.velocity = new THREE.Vector3().copy(this.heading).multiplyScalar(BASE_SPEED);
-        this.fleeVel = new THREE.Vector3();
-
         this.root.position.set(
-          randInRange(-AQUARIUM_BOUNDS.x*0.3, AQUARIUM_BOUNDS.x*0.3),
-          randInRange(0.8, 2.4),
-          randInRange(-AQUARIUM_BOUNDS.z*0.3, AQUARIUM_BOUNDS.z*0.3)
+          (Math.random() - 0.5) * 6,
+          1.2 + Math.random() * 2,
+          (Math.random() - 0.5) * 6
         );
-        this.root.rotation.y = Math.atan2(this.heading.x, this.heading.z);
+        this.root.rotation.y = Math.random() * Math.PI * 2;
       }
-
-      fleeFrom(point, strength = FLEE_IMPULSE) {
-        if (this.isDead) return;
-        const dir = new THREE.Vector3().subVectors(this.root.position, point);
-        dir.y *= 0.3; // flee mostly horizontally
-        if (dir.lengthSq() < 1e-6) dir.set(Math.random()-0.5, 0, Math.random()-0.5);
-        dir.normalize();
-        this.fleeVel.addScaledVector(dir, strength);
-      }
-
-      bite() {
-        if (this.isDead || !this.actions.bite) return;
-        const a = this.actions.bite;
-        a.reset().setLoop(THREE.LoopOnce).clampWhenFinished = true;
-        a.fadeIn(0.05).play();
-        setTimeout(() => a.fadeOut(0.2), 400);
-      }
-
-      die() {
-        if (this.isDead) return;
-        this.isDead = true;
-        // Stop other actions and play death
-        for (const k in this.actions) if (k !== 'death') this.actions[k].stop();
-        if (this.actions.death) {
-          this.actions.death.reset().play();
-        }
-        // Remove from clickables so user can't kill twice
-        this.root.traverse(o => { if (o.isMesh) {
-          const i = clickable.indexOf(o); if (i !== -1) clickable.splice(i,1);
-        }});
-      }
-
-      update(dt) {
-        this.mixer.update(dt);
-        if (this.isDead) {
-          this.root.position.y -= 0.1 * dt;
-          this.root.rotation.z = THREE.MathUtils.lerp(this.root.rotation.z, 0.3, 0.05);
-          return;
-        }
-
-        this.heading.x += (Math.random()-0.5) * 0.15 * dt;
-        this.heading.y += (Math.random()-0.5) * 0.05 * dt;
-        this.heading.z += (Math.random()-0.5) * 0.15 * dt;
-        this.heading.y = THREE.MathUtils.clamp(this.heading.y, -0.2, 0.2);
-        this.heading.normalize();
-
-        this.fleeVel.multiplyScalar(Math.max(0, 1 - FLEE_DECAY * dt));
-        const desired = new THREE.Vector3().copy(this.heading).multiplyScalar(BASE_SPEED).add(this.fleeVel);
-        this.velocity.lerp(desired, TURN_RATE * dt);
-
-        this.root.position.addScaledVector(this.velocity, dt);
-
-        const yaw = Math.atan2(this.velocity.x, this.velocity.z);
-        this.root.rotation.y = THREE.MathUtils.lerp(this.root.rotation.y, yaw, 0.25);
-        const roll = THREE.MathUtils.clamp(- (this.root.rotation.y - yaw), -0.4, 0.4);
-        this.root.rotation.z = THREE.MathUtils.lerp(this.root.rotation.z, roll, 0.1);
-
-        const p = this.root.position;
-        if (Math.abs(p.x) > AQUARIUM_BOUNDS.x) { p.x = THREE.MathUtils.clamp(p.x, -AQUARIUM_BOUNDS.x, AQUARIUM_BOUNDS.x); this.heading.x *= -1; }
-        if (p.y < 0.2 || p.y > AQUARIUM_BOUNDS.y) { p.y = THREE.MathUtils.clamp(p.y, 0.2, AQUARIUM_BOUNDS.y); this.heading.y *= -1; }
-        if (Math.abs(p.z) > AQUARIUM_BOUNDS.z) { p.z = THREE.MathUtils.clamp(p.z, -AQUARIUM_BOUNDS.z, AQUARIUM_BOUNDS.z); this.heading.z *= -1; }
-      }
+      update(dt) {}
     }
 
-      fleeFrom(point, strength = FLEE_IMPULSE) {
-        if (this.isDead) return;
-        const dir = new THREE.Vector3().subVectors(this.root.position, point);
-        dir.y *= 0.3; // flee mostly horizontally
-        if (dir.lengthSq() < 1e-6) dir.set(Math.random()-0.5, 0, Math.random()-0.5);
-        dir.normalize();
-        this.fleeVel.addScaledVector(dir, strength);
-      }
-
-      bite() {
-        if (this.isDead || !this.actions.bite) return;
-        const a = this.actions.bite;
-        a.reset().setLoop(THREE.LoopOnce).clampWhenFinished = true;
-        a.fadeIn(0.05).play();
-        setTimeout(() => a.fadeOut(0.2), 400);
-      }
-
-      die() {
-        if (this.isDead) return;
-        this.isDead = true;
-        // Stop other actions and play death
-        for (const k in this.actions) if (k !== 'death') this.actions[k].stop();
-        if (this.actions.death) {
-          this.actions.death.reset().play();
-        }
-        // Remove from clickables so user can't kill twice
-        this.root.traverse(o => { if (o.isMesh) {
-          const i = clickable.indexOf(o); if (i !== -1) clickable.splice(i,1);
-        }});
-      }
-
-      update(dt) {
-        this.mixer.update(dt);
-        if (this.isDead) {
-          // Let the corpse slowly sink/spin after animation settles
-          this.root.position.y -= 0.1 * dt;
-          this.root.rotation.z = THREE.MathUtils.lerp(this.root.rotation.z, 0.3, 0.05);
-          return;
-        }
-
-        // Natural wandering: gently nudge heading
-        this.heading.x += (Math.random()-0.5) * 0.15 * dt;
-        this.heading.y += (Math.random()-0.5) * 0.05 * dt;
-        this.heading.z += (Math.random()-0.5) * 0.15 * dt;
-        this.heading.y = THREE.MathUtils.clamp(this.heading.y, -0.2, 0.2);
-        this.heading.normalize();
-
-        // Combine base velocity + fleeing impulse with decay
-        this.fleeVel.multiplyScalar(Math.max(0, 1 - FLEE_DECAY * dt));
-        const desired = new THREE.Vector3().copy(this.heading).multiplyScalar(BASE_SPEED).add(this.fleeVel);
-        this.velocity.lerp(desired, TURN_RATE * dt);
-
-        // Move
-        this.root.position.addScaledVector(this.velocity, dt);
-
-        // Face direction of travel
-        const yaw = Math.atan2(this.velocity.x, this.velocity.z);
-        this.root.rotation.y = THREE.MathUtils.lerp(this.root.rotation.y, yaw, 0.25);
-        // Subtle roll when turning
-        const roll = THREE.MathUtils.clamp(- (this.root.rotation.y - yaw), -0.4, 0.4);
-        this.root.rotation.z = THREE.MathUtils.lerp(this.root.rotation.z, roll, 0.1);
-
-        // Bounds: bounce softly
-        const p = this.root.position;
-        if (Math.abs(p.x) > AQUARIUM_BOUNDS.x) { p.x = THREE.MathUtils.clamp(p.x, -AQUARIUM_BOUNDS.x, AQUARIUM_BOUNDS.x); this.heading.x *= -1; }
-        if (p.y < 0.2 || p.y > AQUARIUM_BOUNDS.y) { p.y = THREE.MathUtils.clamp(p.y, 0.2, AQUARIUM_BOUNDS.y); this.heading.y *= -1; }
-        if (Math.abs(p.z) > AQUARIUM_BOUNDS.z) { p.z = THREE.MathUtils.clamp(p.z, -AQUARIUM_BOUNDS.z, AQUARIUM_BOUNDS.z); this.heading.z *= -1; }
-      }
-    }
-
-    // --------- Load the model, then spawn fish ---------
     const loader = new GLTFLoader();
     loader.load(MODEL_URL, (gltf) => {
       const template = gltf.scene;
-      const clips = gltf.animations || [];
+      const clips = gltf.animations;
+      const scale = centerAndScale(template, 2.2);
+      console.log('✅ Fish model loaded.');
+      console.log('Applied scale:', scale);
+      console.log('Animation clips:', clips.map(c => c.name));
 
-      const appliedScale = centerAndScale(template, 2.2);
-      console.log('Template normalized. Applied scale:', appliedScale);
-      console.log('Found animation clips:', clips.map(c => c.name));
-
-      // Spawn one fish at origin for visibility sanity-check
-      const originFish = new Fish(template, clips);
-      originFish.root.position.set(0, 1.2, 0);
-      fishList.push(originFish);
-
-      for (let i = 1; i < FISH_COUNT; i++) {
-        const fish = new Fish(template, clips);
+      // Spawn fish
+      for (let i = 0; i < FISH_COUNT; i++) {
+        const fish = new Fish(template);
         fishList.push(fish);
       }
 
-      if (!fishList.length) console.warn('No fish spawned.');
-
       animate();
-    }, (xhr) => {
-      // progress
-    }, (err) => {
-      console.error('Failed to load GLB', err);
+    }, undefined, (err) => {
+      console.error('❌ Failed to load GLB:', err);
     });
 
-    // --------- Interaction ---------
-    function getIntersects(clientX, clientY, targets) {
-      const rect = renderer.domElement.getBoundingClientRect();
-      mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1;
-      mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1;
-      raycaster.setFromCamera(mouse, camera);
-      return raycaster.intersectObjects(targets, true);
-    }
-
-    window.addEventListener('pointerdown', (e) => {
-      const fishHits = getIntersects(e.clientX, e.clientY, clickable);
-      if (fishHits.length) {
-        // Find owning fish for the first hit
-        const hit = fishHits[0].object;
-        const fish = fishList.find(f => hit.isMesh && f.root && f.root.uuid === hit.getRootNode().uuid);
-        if (fish && !fish.isDead) {
-          fish.die();
-          // Others flee from the dying fish
-          const origin = fish.root.position.clone();
-          fishList.forEach(f2 => { if (f2 !== fish) f2.fleeFrom(origin, FLEE_IMPULSE * 1.2); });
-        }
-        return;
-      }
-      // Otherwise, click on water plane to get world point
-      const waterHits = getIntersects(e.clientX, e.clientY, [water]);
-      if (waterHits.length) {
-        const point = waterHits[0].point;
-        fishList.forEach(f => f.fleeFrom(point, FLEE_IMPULSE));
-      }
-    });
-
-    // Double-click empty space → recentre camera target softly
-    window.addEventListener('dblclick', (e) => {
-      const hits = getIntersects(e.clientX, e.clientY, [water]);
-      if (hits.length) {
-        const p = hits[0].point;
-        controls.target.lerp(p, 0.8);
-      }
-    });
-
-    // --------- Main loop ---------
     function animate() {
-      const dt = Math.min(0.033, clock.getDelta());
-      for (const f of fishList) f.update(dt);
+      const dt = clock.getDelta();
       controls.update();
       renderer.render(scene, camera);
       requestAnimationFrame(animate);
     }
 
-    // --------- Resize ---------
     window.addEventListener('resize', () => {
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
