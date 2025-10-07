@@ -3,281 +3,83 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Aquarium of Existential Fish — GLB + Animations</title>
+  <title>Simple GLB Fish Test</title>
   <style>
-    html, body { height: 100%; margin: 0; overflow: hidden; }
-    body {
-      background:
-        radial-gradient(1200px 800px at 70% 30%, rgba(255, 0, 255, 0.2), transparent 60%),
-        radial-gradient(1000px 700px at 20% 80%, rgba(0, 255, 255, 0.15), transparent 60%),
-        linear-gradient(180deg, #0b0b1a, #1a0f2e 40%, #051018 80%, #000);
-    }
-    body:before {
-      content: "";
-      position: fixed; inset: 0;
-      background:
-        repeating-linear-gradient(0deg, rgba(255,255,255,0.02) 0 1px, rgba(0,0,0,0.02) 1px 2px),
-        repeating-linear-gradient(90deg, rgba(255,255,255,0.02) 0 1px, rgba(0,0,0,0.02) 1px 2px);
-      mix-blend-mode: soft-light; pointer-events: none;
-    }
-    #app { position: fixed; inset: 0; }
-    .hud {
-      position: fixed; left: 16px; bottom: 16px; color: #e6dcff;
-      font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; opacity: .9;
-      background: rgba(10,10,20,.35); backdrop-filter: blur(6px);
-      border: 1px solid rgba(255,255,255,.1); border-radius: 10px; padding: 10px 12px;
-    }
-    .hud kbd { padding: 2px 5px; border-radius: 6px; border: 1px solid rgba(255,255,255,.2); background: rgba(255,255,255,.05); }
-    .hud a { color: #c9f; text-decoration: none; }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #101019; }
+    canvas { display: block; }
   </style>
 </head>
 <body>
-  <div id="app"></div>
-  <div class="hud">
-    <div><strong>Aquarium of Existential Fish</strong> — GLB/Three.js</div>
-    <div>• Click <kbd>fish</kbd> → plays <em>death</em> animation; others flee.</div>
-    <div>• Click <kbd>water</kbd> → all fish flee from the click point.</div>
-    <div>• Drag to orbit; <kbd>double-click</kbd> empty water to recentre camera.</div>
-    <div>• Model path: <code>models/fish.glb</code></div>
-  </div>
-
   <script type="module">
     import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
-    import { OrbitControls } from 'https://unpkg.com/three@0.160.0/examples/jsm/controls/OrbitControls.js';
     import { GLTFLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders/GLTFLoader.js';
-    import { SkeletonUtils } from 'https://unpkg.com/three@0.160.0/examples/jsm/utils/SkeletonUtils.js';
+    import { OrbitControls } from 'https://unpkg.com/three@0.160.0/examples/jsm/controls/OrbitControls.js';
 
-    // ---------- CONFIG ----------
-    const MODEL_URL   = 'models/fish.glb';
-    const FISH_COUNT  = 12;
-    const AQUARIUM_BOUNDS = new THREE.Vector3(20, 10, 20);
-    const BASE_SPEED  = 0.8;
-    const FLEE_IMPULSE= 6.0;
-    const FLEE_DECAY  = 1.6;
-    const TURN_RATE   = 1.5;
-    const DEBUG       = false; // set true if you want green box helpers
-
-    const ANIM_HINTS = {
-      swim:  ['swim','idle','swimming','loop'],
-      bite:  ['bite','attack','peck'],
-      death: ['death','die']
-    };
-
-    // ---------- SCENE ----------
-    const app = document.getElementById('app');
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    app.appendChild(renderer.domElement);
-
+    // --- basic setup ---
     const scene = new THREE.Scene();
-    scene.fog = new THREE.FogExp2(0x03040a, 0.08);
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 100);
+    camera.position.set(0, 1.5, 4);
 
-    const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 200);
-    camera.position.set(0, 3, 12);
-    camera.lookAt(0, 1.2, 0);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
 
     const controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true; controls.dampingFactor = 0.06; controls.enablePan = false;
+    controls.enableDamping = true;
 
-    const hemi = new THREE.HemisphereLight(0x9bb8ff, 0x090515, 1.1);
-    const dir  = new THREE.DirectionalLight(0xffa6f7, 0.9); dir.position.set(-6, 10, 6);
-    scene.add(hemi, dir);
+    // --- lights ---
+    const hemi = new THREE.HemisphereLight(0xffffff, 0x222233, 1.2);
+    scene.add(hemi);
+    const dir = new THREE.DirectionalLight(0xffffff, 0.6);
+    dir.position.set(3, 5, 2);
+    scene.add(dir);
 
-    // water plane (invisible) so we can raycast clicks
-    const waterGeo = new THREE.PlaneGeometry(200, 200, 1, 1);
-    const waterMat = new THREE.MeshBasicMaterial({ visible: false });
-    const water    = new THREE.Mesh(waterGeo, waterMat);
-    water.rotation.x = -Math.PI / 2; // y=0 plane
-    scene.add(water);
-
-    // subtle particles
-    const starGeo = new THREE.BufferGeometry();
-    const starCount = 1800;
-    const positions = new Float32Array(starCount * 3);
-    for (let i=0;i<starCount;i++){
-      positions[i*3+0] = (Math.random()-0.5)*80;
-      positions[i*3+1] = Math.random()*30 - 5;
-      positions[i*3+2] = (Math.random()-0.5)*80;
-    }
-    starGeo.setAttribute('position', new THREE.BufferAttribute(positions,3));
-    scene.add(new THREE.Points(starGeo, new THREE.PointsMaterial({ size: 0.06, transparent: true, opacity: 0.35 })));
-
-    if (DEBUG) {
-      const axes = new THREE.AxesHelper(3); axes.position.set(0,1,0); scene.add(axes);
-    }
-
-    const raycaster = new THREE.Raycaster();
-    const mouse     = new THREE.Vector2();
-    const clock     = new THREE.Clock();
-    const fishList  = [];
-    const clickable = [];
-
-    // ---------- HELPERS ----------
-    function findClip(clips, keywords){
-      if (!clips || !clips.length) return null;
-      const lower = clips.map(c => ({ c, name: (c.name||'').toLowerCase() }));
-      for (const k of keywords){ const hit = lower.find(o => o.name.includes(k)); if (hit) return hit.c; }
-      return null;
-    }
-    function autoClips(clips){
-      const death = findClip(clips, ANIM_HINTS.death) || clips.find(c => /death|die/i.test(c.name));
-      const swim  = findClip(clips, ANIM_HINTS.swim)  || clips.find(c => c !== death);
-      const bite  = findClip(clips, ANIM_HINTS.bite);
-      return { swim, bite, death };
-    }
-    // normalize model: scale to ~2 units and center at origin
-    function centerAndScale(object, targetSize = 2.2){
-      const box = new THREE.Box3().setFromObject(object);
-      const size = new THREE.Vector3(); box.getSize(size);
-      const maxDim = Math.max(size.x,size.y,size.z)||1;
-      const scale = targetSize / maxDim; object.scale.setScalar(scale);
-      const box2 = new THREE.Box3().setFromObject(object);
-      const center = new THREE.Vector3(); box2.getCenter(center);
-      object.position.sub(center); // shift so model’s center is near (0,0,0)
-      return scale;
-    }
-    function rand(min,max){ return Math.random()*(max-min)+min; }
-
-    // ---------- FISH ----------
-    class Fish {
-      constructor(template, clips){
-        this.root = SkeletonUtils.clone(template);
-        this.root.traverse(o => { if (o.isMesh){ clickable.push(o); }});
-        scene.add(this.root);
-
-        if (DEBUG){
-          const bbox = new THREE.Box3().setFromObject(this.root);
-          this.root.add(new THREE.Box3Helper(bbox, 0x66ff88));
-        }
-
-        this.mixer = new THREE.AnimationMixer(this.root);
-        const { swim, bite, death } = autoClips(clips);
-        this.actions = {};
-        if (swim){  this.actions.swim  = this.mixer.clipAction(swim);  this.actions.swim.setLoop(THREE.LoopRepeat); this.actions.swim.play(); }
-        if (bite){  this.actions.bite  = this.mixer.clipAction(bite); }
-        if (death){ this.actions.death = this.mixer.clipAction(death); this.actions.death.setLoop(THREE.LoopOnce); this.actions.death.clampWhenFinished = true; }
-
-        this.isDead  = false;
-        this.heading = new THREE.Vector3(rand(-1,1), rand(-0.15,0.15), rand(-1,1)).normalize();
-        this.velocity= new THREE.Vector3().copy(this.heading).multiplyScalar(BASE_SPEED);
-        this.fleeVel = new THREE.Vector3();
-
-        this.root.position.set(rand(-AQUARIUM_BOUNDS.x*0.3, AQUARIUM_BOUNDS.x*0.3),
-                               rand(0.8,2.4),
-                               rand(-AQUARIUM_BOUNDS.z*0.3, AQUARIUM_BOUNDS.z*0.3));
-        this.root.rotation.y = Math.atan2(this.heading.x, this.heading.z);
-      }
-      fleeFrom(point, strength = FLEE_IMPULSE){
-        if (this.isDead) return;
-        const dir = new THREE.Vector3().subVectors(this.root.position, point);
-        dir.y *= 0.3; if (dir.lengthSq()<1e-6) dir.set(Math.random()-0.5,0,Math.random()-0.5);
-        dir.normalize(); this.fleeVel.addScaledVector(dir, strength);
-      }
-      die(){
-        if (this.isDead) return;
-        this.isDead = true;
-        for (const k in this.actions){ if (k!=='death' && this.actions[k]) this.actions[k].stop(); }
-        if (this.actions.death){ this.actions.death.reset().play(); }
-        // remove meshes from hit-test list
-        this.root.traverse(o => { if (o.isMesh){ const i = clickable.indexOf(o); if (i!==-1) clickable.splice(i,1); }});
-      }
-      update(dt){
-        this.mixer.update(dt);
-        if (this.isDead){
-          this.root.position.y -= 0.1*dt; // sink a bit
-          this.root.rotation.z = THREE.MathUtils.lerp(this.root.rotation.z, 0.3, 0.05);
-          return;
-        }
-        // wander
-        this.heading.x += (Math.random()-0.5)*0.15*dt;
-        this.heading.y += (Math.random()-0.5)*0.05*dt;
-        this.heading.z += (Math.random()-0.5)*0.15*dt;
-        this.heading.y = THREE.MathUtils.clamp(this.heading.y, -0.2, 0.2);
-        this.heading.normalize();
-
-        // combine base + fleeing (with decay)
-        this.fleeVel.multiplyScalar(Math.max(0, 1 - FLEE_DECAY*dt));
-        const desired = new THREE.Vector3().copy(this.heading).multiplyScalar(BASE_SPEED).add(this.fleeVel);
-        this.velocity.lerp(desired, TURN_RATE*dt);
-
-        // move + face direction
-        this.root.position.addScaledVector(this.velocity, dt);
-        const yaw = Math.atan2(this.velocity.x, this.velocity.z);
-        this.root.rotation.y = THREE.MathUtils.lerp(this.root.rotation.y, yaw, 0.25);
-        const roll = THREE.MathUtils.clamp(-(this.root.rotation.y - yaw), -0.4, 0.4);
-        this.root.rotation.z = THREE.MathUtils.lerp(this.root.rotation.z, roll, 0.1);
-
-        // bounds
-        const p = this.root.position;
-        if (Math.abs(p.x)>AQUARIUM_BOUNDS.x){ p.x = THREE.MathUtils.clamp(p.x,-AQUARIUM_BOUNDS.x,AQUARIUM_BOUNDS.x); this.heading.x*=-1; }
-        if (p.y<0.2 || p.y>AQUARIUM_BOUNDS.y){ p.y = THREE.MathUtils.clamp(p.y,0.2,AQUARIUM_BOUNDS.y); this.heading.y*=-1; }
-        if (Math.abs(p.z)>AQUARIUM_BOUNDS.z){ p.z = THREE.MathUtils.clamp(p.z,-AQUARIUM_BOUNDS.z,AQUARIUM_BOUNDS.z); this.heading.z*=-1; }
-      }
-    }
-
-    // ---------- LOAD MODEL ----------
+    // --- load fish ---
     const loader = new GLTFLoader();
-    loader.load(MODEL_URL, (gltf)=>{
-      const template = gltf.scene;
-      const clips    = gltf.animations||[];
-      const appliedScale = centerAndScale(template, 2.2);
-      console.log('✅ Fish model loaded. Applied scale:', appliedScale);
-      console.log('Animation clips:', clips.map(c=>c.name));
+    let mixer;
 
-      // spawn one right in front for sanity
-      const first = new Fish(template, clips); first.root.position.set(0,1.2,0); fishList.push(first);
-      for (let i=1;i<FISH_COUNT;i++){ fishList.push(new Fish(template, clips)); }
+    loader.load('models/fish.glb', (gltf) => {
+      const model = gltf.scene;
+      scene.add(model);
 
-      animate();
-    }, undefined, (err)=>{
-      console.error('❌ Failed to load GLB:', err);
+      // scale & center it
+      const box = new THREE.Box3().setFromObject(model);
+      const size = new THREE.Vector3();
+      box.getSize(size);
+      const maxDim = Math.max(size.x, size.y, size.z);
+      const scale = 2 / maxDim;
+      model.scale.setScalar(scale);
+      box.setFromObject(model);
+      const center = new THREE.Vector3();
+      box.getCenter(center);
+      model.position.sub(center);
+
+      // play swim animation if it exists
+      mixer = new THREE.AnimationMixer(model);
+      if (gltf.animations.length > 0) {
+        const swim = gltf.animations.find(a => a.name.toLowerCase().includes('swim')) || gltf.animations[0];
+        const action = mixer.clipAction(swim);
+        action.play();
+      }
+
+      console.log('✅ model loaded:', gltf.animations.map(a=>a.name));
+    }, undefined, (err) => {
+      console.error('❌ failed to load model:', err);
     });
 
-    // ---------- INTERACTION ----------
-    function getIntersects(x,y,targets){
-      const rect = renderer.domElement.getBoundingClientRect();
-      mouse.x = ((x-rect.left)/rect.width)*2 - 1;
-      mouse.y = -((y-rect.top)/rect.height)*2 + 1;
-      raycaster.setFromCamera(mouse, camera);
-      return raycaster.intersectObjects(targets,true);
+    // --- render loop ---
+    const clock = new THREE.Clock();
+    function animate() {
+      requestAnimationFrame(animate);
+      const delta = clock.getDelta();
+      if (mixer) mixer.update(delta);
+      controls.update();
+      renderer.render(scene, camera);
     }
+    animate();
 
-    window.addEventListener('pointerdown', (e)=>{
-      const fishHits = getIntersects(e.clientX, e.clientY, clickable);
-      if (fishHits.length){
-        const rootUUID = fishHits[0].object.getRootNode().uuid;
-        const fish = fishList.find(f => f.root.uuid === rootUUID);
-        if (fish && !fish.isDead){
-          fish.die();
-          const origin = fish.root.position.clone();
-          fishList.forEach(f2 => { if (f2!==fish) f2.fleeFrom(origin, FLEE_IMPULSE*1.2); });
-        }
-        return;
-      }
-      const waterHits = getIntersects(e.clientX, e.clientY, [water]);
-      if (waterHits.length){
-        const p = waterHits[0].point;
-        fishList.forEach(f => f.fleeFrom(p, FLEE_IMPULSE));
-      }
-    });
-
-    window.addEventListener('dblclick', (e)=>{
-      const hits = getIntersects(e.clientX, e.clientY, [water]);
-      if (hits.length){ controls.target.lerp(hits[0].point, 0.8); }
-    });
-
-    // ---------- LOOP ----------
-    const tick = ()=> {
-      const dt = Math.min(0.033, clock.getDelta());
-      fishList.forEach(f => f.update(dt));
-      controls.update(); renderer.render(scene, camera);
-      requestAnimationFrame(tick);
-    };
-    function animate(){ tick(); }
-
-    // ---------- RESIZE ----------
-    window.addEventListener('resize', ()=>{
+    // --- handle resize ---
+    window.addEventListener('resize', () => {
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
