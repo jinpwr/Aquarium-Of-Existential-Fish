@@ -1,88 +1,68 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Simple GLB Fish Test</title>
+  <meta charset="utf-8">
+  <title>Static GLB Fish Test</title>
   <style>
-    html, body { margin: 0; height: 100%; overflow: hidden; background: #101019; }
-    canvas { display: block; }
+    html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
   </style>
 </head>
 <body>
   <script type="module">
     import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
     import { GLTFLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders/GLTFLoader.js';
-    import { OrbitControls } from 'https://unpkg.com/three@0.160.0/examples/jsm/controls/OrbitControls.js';
 
-    // --- basic setup ---
+    // --- Scene setup ---
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 100);
-    camera.position.set(0, 1.5, 4);
+    scene.background = new THREE.Color(0x000000);
+
+    const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 100);
+    camera.position.set(0, 1, 3);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setSize(innerWidth, innerHeight);
     document.body.appendChild(renderer.domElement);
 
-    const controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
+    // --- Light ---
+    const light = new THREE.HemisphereLight(0xffffff, 0x444444, 1.2);
+    scene.add(light);
 
-    // --- lights ---
-    const hemi = new THREE.HemisphereLight(0xffffff, 0x222233, 1.2);
-    scene.add(hemi);
-    const dir = new THREE.DirectionalLight(0xffffff, 0.6);
-    dir.position.set(3, 5, 2);
-    scene.add(dir);
-
-    // --- load fish ---
+    // --- Load the fish ---
     const loader = new GLTFLoader();
-    let mixer;
+    loader.load(
+      'models/fish.glb',
+      (gltf) => {
+        const fish = gltf.scene;
 
-    loader.load('models/fish.glb', (gltf) => {
-      const model = gltf.scene;
-      scene.add(model);
+        // scale & center the model
+        const box = new THREE.Box3().setFromObject(fish);
+        const size = new THREE.Vector3();
+        box.getSize(size);
+        const maxDim = Math.max(size.x, size.y, size.z);
+        const scale = 2 / maxDim;
+        fish.scale.setScalar(scale);
 
-      // scale & center it
-      const box = new THREE.Box3().setFromObject(model);
-      const size = new THREE.Vector3();
-      box.getSize(size);
-      const maxDim = Math.max(size.x, size.y, size.z);
-      const scale = 2 / maxDim;
-      model.scale.setScalar(scale);
-      box.setFromObject(model);
-      const center = new THREE.Vector3();
-      box.getCenter(center);
-      model.position.sub(center);
+        box.setFromObject(fish);
+        const center = new THREE.Vector3();
+        box.getCenter(center);
+        fish.position.sub(center);
 
-      // play swim animation if it exists
-      mixer = new THREE.AnimationMixer(model);
-      if (gltf.animations.length > 0) {
-        const swim = gltf.animations.find(a => a.name.toLowerCase().includes('swim')) || gltf.animations[0];
-        const action = mixer.clipAction(swim);
-        action.play();
+        scene.add(fish);
+        renderer.render(scene, camera);
+        console.log('✅ fish.glb loaded and shown.');
+      },
+      undefined,
+      (error) => {
+        console.error('❌ failed to load fish.glb', error);
       }
+    );
 
-      console.log('✅ model loaded:', gltf.animations.map(a=>a.name));
-    }, undefined, (err) => {
-      console.error('❌ failed to load model:', err);
-    });
-
-    // --- render loop ---
-    const clock = new THREE.Clock();
-    function animate() {
-      requestAnimationFrame(animate);
-      const delta = clock.getDelta();
-      if (mixer) mixer.update(delta);
-      controls.update();
-      renderer.render(scene, camera);
-    }
-    animate();
-
-    // --- handle resize ---
+    // --- Resize handler ---
     window.addEventListener('resize', () => {
-      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.aspect = innerWidth / innerHeight;
       camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setSize(innerWidth, innerHeight);
+      renderer.render(scene, camera);
     });
   </script>
 </body>
