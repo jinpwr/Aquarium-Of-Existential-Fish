@@ -5,18 +5,21 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Aquarium of Existential Fish</title>
   <style>
+    /* Darker ocean gradient, top lighter → bottom darker, hue cycles green-blue→blue→blue-purple */
     html, body {
       height: 100%;
       margin: 0;
       overflow: hidden;
-      background: linear-gradient(to bottom, #caecff 0%, #7aa0ff 40%, #180046 100%);
-      animation: bgBluePulse 90s ease-in-out infinite;
+      background: linear-gradient(to bottom, #9ed3da 0%, #3d69b4 45%, #14063a 100%);
+      background-attachment: fixed;
+      animation: hueOcean 110s ease-in-out infinite;
     }
-    @keyframes bgBluePulse {
-      0%   { background: linear-gradient(to bottom, #caecff 0%, #7aa0ff 40%, #180046 100%); }
-      50%  { background: linear-gradient(to bottom, #bcd9ff 0%, #6b8cff 40%, #1a0a4a 100%); }
-      100% { background: linear-gradient(to bottom, #caecff 0%, #7aa0ff 40%, #180046 100%); }
+    @keyframes hueOcean {
+      0%   { background: linear-gradient(to bottom, #9ed3da 0%, #3d69b4 45%, #14063a 100%); }   /* green-blue */
+      50%  { background: linear-gradient(to bottom, #8bbce2 0%, #425dcb 45%, #140a45 100%); }   /* blue */
+      100% { background: linear-gradient(to bottom, #9ed3da 0%, #3d69b4 45%, #14063a 100%); }   /* blue-purple return */
     }
+
     canvas { display:block }
 
     /* subtle film grain */
@@ -45,7 +48,7 @@
 
     /* === Scene === */
     const scene = new THREE.Scene();
-    scene.fog = new THREE.FogExp2(0x120022, 0.05);
+    scene.fog = new THREE.FogExp2(0x0e0830, 0.06);
 
     const camera = new THREE.PerspectiveCamera(65, innerWidth/innerHeight, 0.1, 200);
     camera.position.set(0, 2.2, 7);
@@ -56,38 +59,33 @@
     renderer.setSize(innerWidth, innerHeight);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.35;
+    renderer.toneMappingExposure = 1.6;   // a touch brighter so fish pop
     document.body.appendChild(renderer.domElement);
 
-    /* === Lighting === */
-    const hemi = new THREE.HemisphereLight(0xb9ecff, 0x180020, 0.48);
-    const key  = new THREE.PointLight(0x64d8ff, 16, 80, 2.0); key.position.set(6,4,3);
-    const fill = new THREE.PointLight(0x4dffc8,  8, 80, 2.0); fill.position.set(-6,-1,-2);
-    const rim  = new THREE.PointLight(0x5d5aff, 12,100, 2.2); rim.position.set(0,3.5,-8);
+    /* === Lighting (cool blue, oriented to highlight fish from front-right) === */
+    const hemi = new THREE.HemisphereLight(0xbfeaff, 0x0f1033, 0.7);        // cool sky + deep seafloor
+    const key  = new THREE.PointLight(0x7cd9ff, 26, 120, 1.8); key.position.set(5, 4, 6);  // front-right, bright
+    const fill = new THREE.PointLight(0x6ff0d4, 10, 120, 1.8); fill.position.set(-5, 1.2, 5); // soft fill from left
+    const rim  = new THREE.PointLight(0x6b6bff, 16, 160, 2.2); rim.position.set(0, 3.6, -9);  // cool rim from back
     scene.add(hemi, key, fill, rim);
 
     /* === Helpers === */
     const rand = (a,b)=> a + Math.random()*(b-a);
     const choose = arr => arr[(Math.random()*arr.length)|0];
 
-    /* === Mouse world position (for avoidance) & horizontal pan === */
+    /* === Mouse world position (avoidance) & horizontal pan === */
     const raycaster = new THREE.Raycaster();
     const mouseNDC = new THREE.Vector2(0,0);
-    // invisible plane at z=0 to project mouse onto
     const avoidPlaneZ = 0;
-    const planeNormal = new THREE.Vector3(0,0,1);
-    const plane = new THREE.Plane(planeNormal, -avoidPlaneZ);
-    const mouseWorld = new THREE.Vector3(999,999,0); // start far away (no effect)
-
-    // horizontal pan only
-    let mouseX = 0;                // [-1,1]
-    const panRange = 1.2;          // camera x pan range
+    const plane = new THREE.Plane(new THREE.Vector3(0,0,1), -avoidPlaneZ);
+    const mouseWorld = new THREE.Vector3(999,999,0); // start far away
+    let mouseX = 0;                 // [-1, 1]
+    const panRange = 1.4;           // stronger pan for depth
 
     addEventListener('mousemove', (e)=>{
-      mouseX = (e.clientX / innerWidth) * 2 - 1;   // [-1,1]
+      mouseX = (e.clientX / innerWidth) * 2 - 1;
       mouseNDC.x = mouseX;
       mouseNDC.y = -(e.clientY / innerHeight) * 2 + 1;
-      // project mouse to plane z=0
       raycaster.setFromCamera(mouseNDC, camera);
       raycaster.ray.intersectPlane(plane, mouseWorld);
     });
@@ -147,63 +145,56 @@
       for(const l of lines){ ctx.fillText(l,x,curY); curY+=lineHeight; }
     }
 
-    /* === Procedural fish materials (subtle, naturalistic) === */
-    // Natural base tones (silvery, olive, teal, gold, soft orange/coral)
-    const NATURAL_BASES = [
-      '#d9e1e8', // silver
-      '#9bb3a1', // olive-silver
-      '#74a6b3', // teal-silver
-      '#e2b35a', // gold
-      '#e39b7a'  // soft orange/coral
-    ];
+    /* === Procedural fish textures (subtle, naturalistic) === */
+    const NATURAL_BASES = ['#d9e1e8', '#9bb3a1', '#74a6b3', '#e2b35a', '#e39b7a']; // silver, olive-silver, teal, gold, coral
 
     function canvasFishTexture(seedHex){
       const w = 512, h = 256;
       const c = document.createElement('canvas'); c.width = w; c.height = h;
       const ctx = c.getContext('2d');
 
-      // vertical gradient (belly lighter)
+      // vertical gradient body (belly lighter)
       const g = ctx.createLinearGradient(0, 0, 0, h);
       const base = new THREE.Color(seedHex);
-      const belly = base.clone().lerp(new THREE.Color('#ffffff'), 0.35);
-      const back  = base.clone().lerp(new THREE.Color('#2a2a2a'), 0.18);
+      const belly = base.clone().lerp(new THREE.Color('#ffffff'), 0.40);
+      const back  = base.clone().lerp(new THREE.Color('#1b1f2a'), 0.22);
       g.addColorStop(0.00, `#${belly.getHexString()}`);
-      g.addColorStop(0.50, `#${base.getHexString()}`);
+      g.addColorStop(0.55, `#${base.getHexString()}`);
       g.addColorStop(1.00, `#${back.getHexString()}`);
       ctx.fillStyle = g; ctx.fillRect(0,0,w,h);
 
       // faint lateral line
-      ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+      ctx.strokeStyle = 'rgba(255,255,255,0.28)';
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.moveTo(0, h*0.55);
-      for (let x=0; x<=w; x+=16){
-        const y = h*0.55 + Math.sin(x*0.02)*1.8;
+      ctx.moveTo(0, h*0.56);
+      for (let x=0; x<=w; x+=18){
+        const y = h*0.56 + Math.sin(x*0.02)*1.8;
         ctx.lineTo(x, y);
       }
       ctx.stroke();
 
-      // subtle vertical striping (very faint)
+      // very subtle soft stripes
       ctx.globalAlpha = 0.06;
-      for (let x=0; x<w; x+=18){
-        const fade = (Math.sin(x*0.03)+1)/2 * 0.6 + 0.2;
+      for (let x=0; x<w; x+=20){
+        const fade = (Math.sin(x*0.035)+1)/2 * 0.5 + 0.2;
         ctx.fillStyle = `rgba(255,255,255,${fade})`;
         ctx.fillRect(x, 0, 6, h);
       }
       ctx.globalAlpha = 1;
 
-      // speckles via noise
-      const noise = ctx.createImageData(w, h);
-      for (let i=0; i<w*h; i+=20){ // sparse
+      // tiny speckles
+      const speck = ctx.createImageData(w, h);
+      for (let i=0; i<w*h; i+=18){
         const xx = (i % w), yy = ((i / w)|0);
         const k = (yy*w + xx) * 4;
-        const a = Math.random()*24 | 0; // low alpha
-        noise.data[k+0] = 255;
-        noise.data[k+1] = 255;
-        noise.data[k+2] = 255;
-        noise.data[k+3] = a;
+        const a = Math.random()*18 | 0;
+        speck.data[k+0] = 255;
+        speck.data[k+1] = 255;
+        speck.data[k+2] = 255;
+        speck.data[k+3] = a;
       }
-      ctx.putImageData(noise, 0, 0);
+      ctx.putImageData(speck, 0, 0);
 
       const tex = new THREE.CanvasTexture(c);
       tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
@@ -215,10 +206,11 @@
       const tex = canvasFishTexture(seedHex);
       return new THREE.MeshStandardMaterial({
         map: tex,
-        color: 0xffffff,
-        roughness: 0.45,
-        metalness: 0.25,
-        emissive: new THREE.Color(0x0),
+        color: 0xffffff,          // keep texture colors true
+        roughness: 0.35,
+        metalness: 0.28,
+        emissive: new THREE.Color(0x1a1a1a), // tiny base lift so they don’t crush to black
+        emissiveIntensity: 0.25,
         flatShading: true
       });
     }
@@ -227,10 +219,9 @@
       const g = new THREE.Group();
       const baseHex = choose(NATURAL_BASES);
       const bodyMat = makeMatFromCanvas(baseHex);
-      // fins a touch warmer/desaturated relative to body
       const finMat  = new THREE.MeshStandardMaterial({
-        color: new THREE.Color(baseHex).lerp(new THREE.Color('#ffffff'), 0.15),
-        roughness: 0.6, metalness: 0.2, flatShading: true
+        color: new THREE.Color(baseHex).lerp(new THREE.Color('#ffffff'), 0.18),
+        roughness: 0.55, metalness: 0.2, flatShading: true
       });
 
       const bodyGeo = new THREE.IcosahedronGeometry(rand(0.25,0.38), 0);
@@ -249,7 +240,7 @@
       g.add(finL, finR);
 
       const eyeGeo = new THREE.SphereGeometry(0.04, 12, 12);
-      const eyeMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.15, metalness: 0.3 });
+      const eyeMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.12, metalness: 0.35 });
       const eyeL = new THREE.Mesh(eyeGeo, eyeMat);
       const eyeR = new THREE.Mesh(eyeGeo, eyeMat);
       eyeL.position.set(0.4, 0.06, 0.12); eyeR.position.set(0.4, 0.06, -0.12);
@@ -258,7 +249,7 @@
       return g;
     }
 
-    /* === Fish with bounds + mouse avoidance === */
+    /* === Fish with bounds + stronger mouse avoidance === */
     const BOUNDS = { x: 5.8, y: 2.9, z: 3.8 };
 
     class Fish{
@@ -275,23 +266,23 @@
         scene.add(this.group);
       }
       update(dt){
-        // mild wander
+        // wander
         this.vel.addScaledVector(this.turn, dt).clampLength(0, this.speed);
 
-        // avoidance (gentle & short-range)
+        // stronger avoidance
         const toMouse = new THREE.Vector3().subVectors(this.group.position, mouseWorld);
         const dist = toMouse.length();
-        const influenceRadius = 1.8;
+        const influenceRadius = 3.5;         // was 1.8
         if (isFinite(dist) && dist < influenceRadius){
           const strength = (influenceRadius - dist) / influenceRadius; // 0..1
           toMouse.normalize();
-          this.vel.addScaledVector(toMouse, strength * 0.03); // steer away a bit
+          this.vel.addScaledVector(toMouse, strength * 0.06);  // was 0.03
         }
 
         // move
         this.group.position.addScaledVector(this.vel, dt * 60);
 
-        // keep inside bounds (never leave view)
+        // keep inside bounds
         const p = this.group.position, v = this.vel;
         if (p.x < -BOUNDS.x){ p.x = -BOUNDS.x; v.x = Math.abs(v.x); }
         if (p.x >  BOUNDS.x){ p.x =  BOUNDS.x; v.x = -Math.abs(v.x); }
@@ -304,10 +295,10 @@
         const dir = this.vel.clone().normalize();
         if (dir.lengthSq() > 0.0001){
           const targetQuat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1,0,0), dir);
-          this.group.quaternion.slerp(targetQuat, 0.08);
+          this.group.quaternion.slerp(targetQuat, 0.1);
         }
 
-        // fins wiggle, bubble faces camera
+        // fin wiggle & bubble billboard
         this.mesh.children.forEach(c=>{ if(c.geometry && c.geometry.type==='ConeGeometry'){ c.rotation.y += 0.04; }});
         this.bubble.lookAt(camera.position);
       }
@@ -315,7 +306,7 @@
     }
 
     const FISH=[]; for(let i=0;i<18;i++) FISH.push(new Fish());
-    setInterval(()=>{ const f = choose(FISH); if (f) f.randomThought(); }, 2000);
+    setInterval(()=>{ const f = choose(FISH); if (f) f.randomThought(); }, 2200);
 
     /* === Floating water bubbles === */
     const bubbleCount=220;
@@ -401,9 +392,9 @@
       const dt = Math.min((now - last)/1000, 0.05); last = now;
       const t = now * 0.001;
 
-      // horizontal camera pan only
+      // horizontal camera pan for depth
       const targetX = mouseX * panRange;
-      camera.position.x += (targetX - camera.position.x) * 0.04;
+      camera.position.x += (targetX - camera.position.x) * 0.05;
       camera.lookAt(0,0,0);
 
       for(const f of FISH) f.update(dt);
@@ -414,6 +405,10 @@
       requestAnimationFrame(tick);
     }
     requestAnimationFrame(tick);
+
+    /* === Create fish after functions are defined === */
+    const FISH=[]; for(let i=0;i<18;i++) FISH.push(new Fish());
+    setInterval(()=>{ const f = FISH[(Math.random()*FISH.length)|0]; if (f) f.randomThought(); }, 2200);
   </script>
 </body>
 </html>
