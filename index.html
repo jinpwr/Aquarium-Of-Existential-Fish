@@ -5,29 +5,36 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Aquarium of Existential Fish</title>
   <style>
-    /* Page & animated vaporwave gradient */
+    /* ===== Background: light (top) -> dark (bottom), slow dreamy hue shift within blues/pinks ===== */
+    :root{
+      --top:   #c9e8ff;   /* light aqua */
+      --mid:   #8ac8ff;   /* sky blue */
+      --bot:   #1a0030;   /* deep violet */
+    }
     html, body {
       height: 100%;
       margin: 0;
       overflow: hidden;
-      background: linear-gradient(-45deg, #0b0016, #2b0040, #ff71ce, #01cdfe, #b967ff, #0b0016);
-      background-size: 400% 400%;
-      animation: gradientShift 40s ease infinite;
+      background:
+        linear-gradient(to bottom, var(--top) 0%, var(--mid) 45%, var(--bot) 100%);
+      background-attachment: fixed;
+      /* Constrain hue shift to vaporwave band (cool blues <-> pinks), slow & dreamy */
+      animation: hueCycleVaporwave 90s ease-in-out infinite;
+      filter: hue-rotate(0deg) saturate(110%);
     }
-    @keyframes gradientShift {
-      0% { background-position: 0% 50%; }
-      50% { background-position: 100% 50%; }
-      100% { background-position: 0% 50%; }
+    /* oscillates ~±30° to stay in blue/pink territory */
+    @keyframes hueCycleVaporwave {
+      0%   { filter: hue-rotate(-15deg) saturate(115%); }
+      50%  { filter: hue-rotate( 30deg) saturate(120%); }
+      100% { filter: hue-rotate(-15deg) saturate(115%); }
     }
 
-    /* Ensure layers: canvas below, dither above, overlay on top */
+    /* Canvas stack */
     canvas { position: relative; z-index: 0; display: block; }
-    #dither { z-index: 1; }
-    #overlay { z-index: 2; }
 
-    /* Pixel-dither overlay */
+    /* Pixel dither */
     #dither {
-      position: fixed; inset: 0; pointer-events: none; opacity: .15;
+      position: fixed; inset: 0; pointer-events: none; opacity: .12; z-index: 1;
       background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" fill="black" opacity="0"/><rect x="0" y="0" width="2" height="2" fill="white" opacity="0.07"/><rect x="2" y="2" width="2" height="2" fill="white" opacity="0.07"/></svg>');
       image-rendering: pixelated; background-size: 4px; background-repeat: repeat;
       mix-blend-mode: overlay;
@@ -35,89 +42,69 @@
 
     /* UI overlay */
     #overlay {
-      position: fixed; inset: 0; pointer-events: none;
+      position: fixed; inset: 0; pointer-events: none; z-index: 3;
       display: flex; align-items: flex-end; justify-content: space-between;
       padding: 12px 14px;
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       color: #b3f4ff;
+      text-shadow: 0 1px 2px rgba(0,0,0,.25);
     }
-    #overlay .hint { opacity: .8; font-size: 12px; }
+    #overlay .hint { opacity: .9; font-size: 12px; }
     #overlay .title { margin-left: auto; font-weight: 700; letter-spacing: .5px; font-size: 12px; color: #9effc7; }
   </style>
 </head>
 <body>
   <div id="dither"></div>
   <div id="overlay">
-    <div class="hint">Move mouse: parallax · Click fish: freeze/vanish · Press <kbd>H</kbd>: hide bubbles</div>
+    <div class="hint">Move mouse: parallax · Click fish: freeze/vanish · <kbd>H</kbd>: hide bubbles</div>
     <div class="title">Aquarium of Existential Fish</div>
   </div>
 
   <script type="module">
     import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
 
-    // --- Scene / Camera / Transparent Renderer ---
+    /* ===== Scene / Camera / Renderer ===== */
     const scene = new THREE.Scene();
-    scene.fog = new THREE.FogExp2(0x0b0016, 0.055); // slightly lighter fog to reduce overall darkening
+    scene.fog = new THREE.FogExp2(0x120022, 0.05);
 
-    const camera = new THREE.PerspectiveCamera(65, innerWidth/innerHeight, 0.1, 100);
+    const camera = new THREE.PerspectiveCamera(65, innerWidth/innerHeight, 0.1, 120);
     camera.position.set(0, 2.2, 7);
 
-    // Transparent renderer so CSS background shows through
-    const renderer = new THREE.WebGLRenderer({
-      antialias: true,
-      alpha: true,
-      premultipliedAlpha: false
-    });
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, premultipliedAlpha: false });
     renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     renderer.setSize(innerWidth, innerHeight);
-    renderer.setClearColor(0x000000, 0); // fully transparent
-
-    // >>> Color management & filmic tone mapping for punchier brights
+    renderer.setClearColor(0x000000, 0);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.35; // bump to make colors pop
-
+    renderer.toneMappingExposure = 1.35;
     document.body.appendChild(renderer.domElement);
 
-    // --- Lighting: brighter + more directional drama (key / fill / rim / ambient hemi) ---
-    // Subtle ambient so nothing goes to black
-    const hemi = new THREE.HemisphereLight(0xb9ecff, 0x180020, 0.45);
+    /* ===== Lighting (unchanged vibe: dramatic, good 3D read) ===== */
+    const hemi = new THREE.HemisphereLight(0xb9ecff, 0x180020, 0.48);
     scene.add(hemi);
 
-    // Strong cyan key from upper right
-    const key = new THREE.PointLight(0x64d8ff, 16, 50, 2.0);
-    key.position.set(6, 4, 3);
-    scene.add(key);
+    const key = new THREE.PointLight(0x64d8ff, 16, 80, 2.0);  key.position.set(6, 4, 3);   scene.add(key);
+    const fill = new THREE.PointLight(0x4dffc8,  8, 80, 2.0); fill.position.set(-6, -1, -2); scene.add(fill);
+    const rim = new THREE.PointLight(0xff5ad1, 12, 100, 2.2); rim.position.set(0, 3.5, -8);  scene.add(rim);
 
-    // Teal-green fill from opposite side to keep volumes readable
-    const fill = new THREE.PointLight(0x4dffc8, 8, 50, 2.0);
-    fill.position.set(-6, -1, -2);
-    scene.add(fill);
-
-    // Magenta rim/back light to separate from vaporwave background
-    const rim = new THREE.PointLight(0xff5ad1, 12, 60, 2.2);
-    rim.position.set(0, 3.5, -6);
-    scene.add(rim);
-
-    // Helpers
+    /* ===== Helpers ===== */
     const rand = (a,b)=> a + Math.random()*(b-a);
     const choose = arr => arr[(Math.random()*arr.length)|0];
 
+    /* ===== Speech bubbles (same as before) ===== */
     const PHRASES = [
       'i am not real','click to remember','today i forgot myself','be kind to the void','do fish dream?',
       '404: meaning not found','blink slowly','pretend to be water','becoming … becoming','a small thought floats'
     ];
-
-    // Bubble sprites
     function makeBubbleSprite(text){
       const w = 256, h = 128;
       const cvs = document.createElement('canvas'); cvs.width = w; cvs.height = h;
       const ctx = cvs.getContext('2d');
-      ctx.fillStyle = 'rgba(0,0,0,0.28)'; // slightly lighter bubble bg
-      ctx.strokeStyle = 'rgba(200,255,240,0.7)'; ctx.lineWidth = 2;
+      ctx.fillStyle = 'rgba(0,0,0,0.24)';
+      ctx.strokeStyle = 'rgba(220,255,250,0.75)'; ctx.lineWidth = 2;
       roundRect(ctx, 8, 8, w-16, h-16, 14, true, true);
       ctx.font = '600 22px ui-monospace, monospace';
-      ctx.fillStyle = 'rgba(230,255,250,0.98)'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = 'rgba(235,255,250,0.98)'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       wrapText(ctx, text, w/2, h/2, w-36, 28);
       const tex = new THREE.CanvasTexture(cvs);
       tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
@@ -131,11 +118,11 @@
       const { canvas: cvs, ctx, texture: tex } = sprite.userData;
       const w = cvs.width, h = cvs.height;
       ctx.clearRect(0,0,w,h);
-      ctx.fillStyle = 'rgba(0,0,0,0.28)';
-      ctx.strokeStyle = 'rgba(200,255,240,0.7)'; ctx.lineWidth = 2;
+      ctx.fillStyle = 'rgba(0,0,0,0.24)';
+      ctx.strokeStyle = 'rgba(220,255,250,0.75)'; ctx.lineWidth = 2;
       roundRect(ctx, 8, 8, w-16, h-16, 14, true, true);
       ctx.font = '600 22px ui-monospace, monospace';
-      ctx.fillStyle = 'rgba(230,255,250,0.98)'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = 'rgba(235,255,250,0.98)'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       wrapText(ctx, text, w/2, h/2, w-36, 28);
       tex.needsUpdate = true;
     }
@@ -165,9 +152,8 @@
       for (const l of lines){ ctx.fillText(l, x, curY); curY += lineHeight; }
     }
 
-    // --- BRIGHTER, GLOWIER FISH MATERIAL ---
+    /* ===== Bright pastel fish (kept) ===== */
     function makeBrightMaterial(h){
-      // High saturation, higher lightness; add emissive for gentle self-glow
       const color = new THREE.Color().setHSL(h, 0.92, 0.66);
       return new THREE.MeshStandardMaterial({
         color,
@@ -178,11 +164,9 @@
         flatShading: true
       });
     }
-
-    // Fish mesh
     function makeFishMesh(){
       const g = new THREE.Group();
-      const hue = Math.random(); // lock one palette per fish
+      const hue = Math.random();
       const bodyMat = makeBrightMaterial(hue);
       const accentMat = makeBrightMaterial((hue + 0.08) % 1);
       const accentMat2 = makeBrightMaterial((hue + 0.15) % 1);
@@ -204,7 +188,6 @@
       finR.position.set(0.1, -0.1, -0.18); finR.rotation.z = -Math.PI/3; finR.rotation.y = Math.PI;
       g.add(finL, finR);
 
-      // small glossy eyes so faces read
       const eyeGeo = new THREE.SphereGeometry(0.04, 12, 12);
       const eyeMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.1, metalness: 0.2 });
       const eyeL = new THREE.Mesh(eyeGeo, eyeMat);
@@ -214,8 +197,6 @@
 
       return g;
     }
-
-    // Fish entity
     class Fish {
       constructor(){
         this.group = new THREE.Group();
@@ -250,7 +231,6 @@
             const targetQuat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1,0,0), dir);
             this.group.quaternion.slerp(targetQuat, 0.08);
           }
-          // Wiggle fins
           this.mesh.children.forEach((c)=>{ if(c.geometry && c.geometry.type === 'ConeGeometry'){ c.rotation.y += 0.04; }});
         }
         this.bubble.lookAt(camera.position);
@@ -273,24 +253,144 @@
       setBubblesVisible(v){ this.bubble.visible = v; this.bubbleVisible = v; }
     }
 
-    // School
+    /* ===== Fish school ===== */
     const FISH = [];
     for (let i=0; i<18; i++) FISH.push(new Fish());
-
     setInterval(()=>{
       const f = choose(FISH.filter(f=>!f.dead));
       if (f) f.randomThought();
     }, 1800);
 
-    // Interaction
-    const ray = new THREE.Raycaster();
-    const mouse = new THREE.Vector2();
+    /* ===== NEW: Floating water bubbles (bottom -> top, gentle drift) ===== */
+    const bubbleCount = 220;
+    const bubbleGeo = new THREE.BufferGeometry();
+    const positions = new Float32Array(bubbleCount * 3);
+    const speeds = new Float32Array(bubbleCount);
+    const xDrifts = new Float32Array(bubbleCount);
+    for (let i=0; i<bubbleCount; i++){
+      positions[i*3+0] = rand(-6, 6);
+      positions[i*3+1] = rand(-3, 3);
+      positions[i*3+2] = rand(-4, 4);
+      speeds[i] = rand(0.12, 0.45);       // upward speed
+      xDrifts[i] = rand(-0.15, 0.15);     // sideways drift
+    }
+    bubbleGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
 
+    // soft, additive circles
+    const bubbleMat = new THREE.PointsMaterial({
+      color: new THREE.Color(0xdff9ff),
+      size: 0.06,
+      sizeAttenuation: true,
+      transparent: true,
+      opacity: 0.7,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+    const bubbles = new THREE.Points(bubbleGeo, bubbleMat);
+    bubbles.position.y = 0;
+    scene.add(bubbles);
+
+    function updateBubbles(dt){
+      const arr = bubbleGeo.attributes.position.array;
+      for (let i=0; i<bubbleCount; i++){
+        let x = arr[i*3+0];
+        let y = arr[i*3+1];
+        let z = arr[i*3+2];
+
+        y += speeds[i] * dt;              // rise
+        x += xDrifts[i] * dt * 0.4;       // slight sway
+
+        // recycle near the top
+        if (y > 3.2){
+          y = -3.2;
+          x = rand(-6,6);
+          z = rand(-4,4);
+          speeds[i] = rand(0.12, 0.45);
+          xDrifts[i] = rand(-0.15, 0.15);
+        }
+
+        arr[i*3+0] = x; arr[i*3+1] = y; arr[i*3+2] = z;
+      }
+      bubbleGeo.attributes.position.needsUpdate = true;
+    }
+
+    /* ===== NEW: Soft god-rays (fake volumetric light shafts) =====
+       We create translucent gradient planes with additive blending,
+       placed behind the fish and gently swaying. */
+    const godRayTex = makeGodRayTexture(); // canvas-generated gradient
+    const godRayMat = new THREE.MeshBasicMaterial({
+      map: godRayTex,
+      transparent: true,
+      opacity: 0.17,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+    const godRays = new THREE.Group();
+    scene.add(godRays);
+
+    const rayPlanes = [];
+    for (let i=0; i<5; i++){
+      const w = rand(4, 7), h = rand(6, 10);
+      const plane = new THREE.Mesh(new THREE.PlaneGeometry(w, h, 1, 1), godRayMat.clone());
+      plane.position.set(rand(-3.5, 3.5), rand(-0.5, 2.5), rand(-6, -3)); // behind fish
+      plane.rotation.set(rand(-0.2, 0.2), rand(-0.2, 0.2), rand(-0.6, 0.6));
+      plane.material.opacity = rand(0.10, 0.20);
+      godRays.add(plane);
+      rayPlanes.push({ mesh: plane, phase: Math.random()*Math.PI*2, speed: rand(0.15, 0.35) });
+    }
+
+    function updateGodRays(dt, t){
+      // gentle breathing/sway + small opacity pulse
+      for (const r of rayPlanes){
+        r.phase += r.speed * dt * 0.35;
+        const m = r.mesh;
+        m.rotation.z += Math.sin(r.phase) * 0.0008;
+        m.rotation.x += Math.cos(r.phase * 0.7) * 0.0006;
+        const base = 0.12;
+        m.material.opacity = base + 0.06 * (0.5 + 0.5 * Math.sin(r.phase * 0.9));
+      }
+    }
+
+    function makeGodRayTexture(){
+      const w = 512, h = 1024;
+      const c = document.createElement('canvas'); c.width = w; c.height = h;
+      const ctx = c.getContext('2d');
+
+      // radial-ish vertical gradient: bright core, feathered edges
+      const grad = ctx.createLinearGradient(w*0.5, 0, w*0.5, h);
+      grad.addColorStop(0.00, 'rgba(255,255,255,0.00)');
+      grad.addColorStop(0.10, 'rgba(255,255,255,0.10)');
+      grad.addColorStop(0.50, 'rgba(255,255,255,0.25)');
+      grad.addColorStop(0.90, 'rgba(255,255,255,0.08)');
+      grad.addColorStop(1.00, 'rgba(255,255,255,0.00)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0,0,w,h);
+
+      // feather left/right to make a shaft
+      const edge = ctx.createLinearGradient(0, 0, w, 0);
+      edge.addColorStop(0.00, 'rgba(255,255,255,0.00)');
+      edge.addColorStop(0.25, 'rgba(255,255,255,0.10)');
+      edge.addColorStop(0.50, 'rgba(255,255,255,0.25)');
+      edge.addColorStop(0.75, 'rgba(255,255,255,0.10)');
+      edge.addColorStop(1.00, 'rgba(255,255,255,0.00)');
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = edge;
+      ctx.fillRect(0,0,w,h);
+
+      const tex = new THREE.CanvasTexture(c);
+      tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+      tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+      return tex;
+    }
+
+    /* ===== Interaction ===== */
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
     function onClick(e){
       mouse.x = (e.clientX / innerWidth) * 2 - 1;
       mouse.y = -(e.clientY / innerHeight) * 2 + 1;
-      ray.setFromCamera(mouse, camera);
-      const hits = ray.intersectObjects(FISH.map(f=>f.mesh), true);
+      raycaster.setFromCamera(mouse, camera);
+      const hits = raycaster.intersectObjects(FISH.map(f=>f.mesh), true);
       if (!hits.length) return;
       const hit = hits[0].object;
       const fish = FISH.find(f=>{ let found=false; f.mesh.traverse(o=>{ if(o===hit) found=true; }); return found; });
@@ -307,27 +407,33 @@
       }
     });
 
-    // Parallax camera
+    /* Parallax camera */
     let targetOffset = new THREE.Vector2(0,0);
     addEventListener('mousemove', (e)=>{
       targetOffset.x = (e.clientX / innerWidth - 0.5) * 0.9;
       targetOffset.y = (e.clientY / innerHeight - 0.5) * 0.6;
     });
 
-    // Resize
+    /* Resize */
     addEventListener('resize', ()=>{
       camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
       renderer.setSize(innerWidth, innerHeight);
     });
 
-    // Animate
+    /* Animate */
     let last = performance.now();
     function tick(now){
       const dt = Math.min((now-last)/1000, 0.05); last = now;
+      const t = now * 0.001;
+
       camera.position.x += (targetOffset.x - camera.position.x) * 0.04;
       camera.position.y += (2.2 + targetOffset.y - camera.position.y) * 0.04;
       camera.lookAt(0,0,0);
+
       for (const f of FISH) f.update(dt);
+      updateBubbles(dt);
+      updateGodRays(dt, t);
+
       renderer.render(scene, camera);
       requestAnimationFrame(tick);
     }
