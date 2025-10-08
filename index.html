@@ -57,7 +57,7 @@
 
     // --- Scene / Camera / Transparent Renderer ---
     const scene = new THREE.Scene();
-    scene.fog = new THREE.FogExp2(0x0b0016, 0.06);
+    scene.fog = new THREE.FogExp2(0x0b0016, 0.055); // slightly lighter fog to reduce overall darkening
 
     const camera = new THREE.PerspectiveCamera(65, innerWidth/innerHeight, 0.1, 100);
     camera.position.set(0, 2.2, 7);
@@ -65,18 +65,39 @@
     // Transparent renderer so CSS background shows through
     const renderer = new THREE.WebGLRenderer({
       antialias: true,
-      alpha: true,              // key: allow background through
-      premultipliedAlpha: false // crisper blending
+      alpha: true,
+      premultipliedAlpha: false
     });
     renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     renderer.setSize(innerWidth, innerHeight);
     renderer.setClearColor(0x000000, 0); // fully transparent
+
+    // >>> Color management & filmic tone mapping for punchier brights
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.35; // bump to make colors pop
+
     document.body.appendChild(renderer.domElement);
 
-    // Lighting
-    const amb = new THREE.AmbientLight(0x88caff, 0.35); scene.add(amb);
-    const key = new THREE.PointLight(0x3bc2ff, 11, 40, 2.2); key.position.set(6, 4, 3); scene.add(key);
-    const fill = new THREE.PointLight(0x44ffb8, 6, 40, 2.2); fill.position.set(-6, -1, -2); scene.add(fill);
+    // --- Lighting: brighter + more directional drama (key / fill / rim / ambient hemi) ---
+    // Subtle ambient so nothing goes to black
+    const hemi = new THREE.HemisphereLight(0xb9ecff, 0x180020, 0.45);
+    scene.add(hemi);
+
+    // Strong cyan key from upper right
+    const key = new THREE.PointLight(0x64d8ff, 16, 50, 2.0);
+    key.position.set(6, 4, 3);
+    scene.add(key);
+
+    // Teal-green fill from opposite side to keep volumes readable
+    const fill = new THREE.PointLight(0x4dffc8, 8, 50, 2.0);
+    fill.position.set(-6, -1, -2);
+    scene.add(fill);
+
+    // Magenta rim/back light to separate from vaporwave background
+    const rim = new THREE.PointLight(0xff5ad1, 12, 60, 2.2);
+    rim.position.set(0, 3.5, -6);
+    scene.add(rim);
 
     // Helpers
     const rand = (a,b)=> a + Math.random()*(b-a);
@@ -92,11 +113,11 @@
       const w = 256, h = 128;
       const cvs = document.createElement('canvas'); cvs.width = w; cvs.height = h;
       const ctx = cvs.getContext('2d');
-      ctx.fillStyle = 'rgba(0,0,0,0.35)';
-      ctx.strokeStyle = 'rgba(180,255,230,0.6)'; ctx.lineWidth = 2;
+      ctx.fillStyle = 'rgba(0,0,0,0.28)'; // slightly lighter bubble bg
+      ctx.strokeStyle = 'rgba(200,255,240,0.7)'; ctx.lineWidth = 2;
       roundRect(ctx, 8, 8, w-16, h-16, 14, true, true);
       ctx.font = '600 22px ui-monospace, monospace';
-      ctx.fillStyle = 'rgba(210,255,245,0.95)'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = 'rgba(230,255,250,0.98)'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       wrapText(ctx, text, w/2, h/2, w-36, 28);
       const tex = new THREE.CanvasTexture(cvs);
       tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
@@ -110,11 +131,11 @@
       const { canvas: cvs, ctx, texture: tex } = sprite.userData;
       const w = cvs.width, h = cvs.height;
       ctx.clearRect(0,0,w,h);
-      ctx.fillStyle = 'rgba(0,0,0,0.35)';
-      ctx.strokeStyle = 'rgba(180,255,230,0.6)'; ctx.lineWidth = 2;
+      ctx.fillStyle = 'rgba(0,0,0,0.28)';
+      ctx.strokeStyle = 'rgba(200,255,240,0.7)'; ctx.lineWidth = 2;
       roundRect(ctx, 8, 8, w-16, h-16, 14, true, true);
       ctx.font = '600 22px ui-monospace, monospace';
-      ctx.fillStyle = 'rgba(210,255,245,0.95)'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = 'rgba(230,255,250,0.98)'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       wrapText(ctx, text, w/2, h/2, w-36, 28);
       tex.needsUpdate = true;
     }
@@ -144,33 +165,48 @@
       for (const l of lines){ ctx.fillText(l, x, curY); curY += lineHeight; }
     }
 
+    // --- BRIGHTER, GLOWIER FISH MATERIAL ---
+    function makeBrightMaterial(h){
+      // High saturation, higher lightness; add emissive for gentle self-glow
+      const color = new THREE.Color().setHSL(h, 0.92, 0.66);
+      return new THREE.MeshStandardMaterial({
+        color,
+        emissive: color.clone().multiplyScalar(0.25),
+        emissiveIntensity: 0.75,
+        roughness: 0.42,
+        metalness: 0.18,
+        flatShading: true
+      });
+    }
+
     // Fish mesh
     function makeFishMesh(){
       const g = new THREE.Group();
+      const hue = Math.random(); // lock one palette per fish
+      const bodyMat = makeBrightMaterial(hue);
+      const accentMat = makeBrightMaterial((hue + 0.08) % 1);
+      const accentMat2 = makeBrightMaterial((hue + 0.15) % 1);
+
       const bodyGeo = new THREE.IcosahedronGeometry(rand(0.25,0.38), 0);
       bodyGeo.scale(rand(1.6,2.1), 1, 1);
-      const bodyMat = new THREE.MeshStandardMaterial({
-        color: new THREE.Color().setHSL(Math.random(), 0.6, 0.5),
-        roughness: 0.8, metalness: 0.05, flatShading: true
-      });
       const body = new THREE.Mesh(bodyGeo, bodyMat); g.add(body);
 
       const tailGeo = new THREE.ConeGeometry(0.2, 0.35, 3);
       tailGeo.rotateZ(Math.PI/2);
       tailGeo.translate(-bodyGeo.parameters.radius*1.1, 0, 0);
-      const tail = new THREE.Mesh(tailGeo, bodyMat.clone());
-      tail.material.color.offsetHSL(0, 0, -0.08);
+      const tail = new THREE.Mesh(tailGeo, accentMat);
       g.add(tail);
 
       const finGeo = new THREE.ConeGeometry(0.08, 0.18, 3);
-      const finL = new THREE.Mesh(finGeo, bodyMat.clone());
-      const finR = new THREE.Mesh(finGeo, bodyMat.clone());
+      const finL = new THREE.Mesh(finGeo, accentMat2);
+      const finR = new THREE.Mesh(finGeo, accentMat2.clone());
       finL.position.set(0.1, -0.1, 0.18); finL.rotation.z = -Math.PI/3;
       finR.position.set(0.1, -0.1, -0.18); finR.rotation.z = -Math.PI/3; finR.rotation.y = Math.PI;
       g.add(finL, finR);
 
-      const eyeGeo = new THREE.SphereGeometry(0.04, 6, 6);
-      const eyeMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+      // small glossy eyes so faces read
+      const eyeGeo = new THREE.SphereGeometry(0.04, 12, 12);
+      const eyeMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.1, metalness: 0.2 });
       const eyeL = new THREE.Mesh(eyeGeo, eyeMat);
       const eyeR = new THREE.Mesh(eyeGeo, eyeMat);
       eyeL.position.set(0.4, 0.06, 0.12); eyeR.position.set(0.4, 0.06, -0.12);
