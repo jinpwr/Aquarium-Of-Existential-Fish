@@ -33,6 +33,19 @@
       mix-blend-mode: overlay;
     }
 
+    /* NEW: Caustics overlay at the top: subtle, screen-blended, fades downward */
+    #caustics {
+      position: fixed;
+      left: 0; top: 0; right: 0;
+      height: 45vh;                 /* how deep the shimmer reaches */
+      z-index: 2;                   /* above canvas/dither, below UI */
+      pointer-events: none;
+      opacity: 0.22;                /* overall intensity (try 0.15–0.30) */
+      mix-blend-mode: screen;       /* brightens background/fish */
+      -webkit-mask-image: linear-gradient(to bottom, rgba(255,255,255,1), rgba(255,255,255,0));
+      mask-image: linear-gradient(to bottom, rgba(255,255,255,1), rgba(255,255,255,0));
+    }
+
     /* Overlay UI text */
     #overlay {
       position: fixed; inset: 0; pointer-events: none; z-index: 3;
@@ -48,6 +61,40 @@
 </head>
 <body>
   <div id="dither"></div>
+
+  <!-- NEW: Water caustics (SVG filter) -->
+  <svg id="caustics" viewBox="0 0 100 100" preserveAspectRatio="none">
+    <defs>
+      <!-- animated noise -->
+      <filter id="causticsFilter">
+        <feTurbulence type="fractalNoise" baseFrequency="0.008 0.02" numOctaves="3" seed="3" stitchTiles="stitch" result="noise">
+          <animate attributeName="baseFrequency" dur="14s" values="0.008 0.02; 0.012 0.025; 0.008 0.02" repeatCount="indefinite"/>
+          <animate attributeName="seed" dur="20s" values="3;5;7;3" repeatCount="indefinite"/>
+        </feTurbulence>
+        <!-- soften/distort to get wavey bands -->
+        <feDisplacementMap in="SourceGraphic" in2="noise" scale="35" xChannelSelector="R" yChannelSelector="G"/>
+        <!-- isolate bright veins (caustic lines) -->
+        <feColorMatrix type="matrix" values="
+          2 0 0 0 0
+          0 2 0 0 0
+          0 0 2 0 0
+          0 0 0 1 -0.7" />
+        <!-- slight blur to avoid harsh pixels -->
+        <feGaussianBlur stdDeviation="0.4"/>
+      </filter>
+
+      <!-- cool blue→violet fill (no pink) -->
+      <linearGradient id="causticsFill" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%"  stop-color="#d9f0ff"/>
+        <stop offset="60%" stop-color="#7aa0ff"/>
+        <stop offset="100%" stop-color="#3b2b7c"/>
+      </linearGradient>
+    </defs>
+
+    <!-- big rect using the filter -->
+    <rect x="0" y="0" width="100" height="100" fill="url(#causticsFill)" filter="url(#causticsFilter)"/>
+  </svg>
+
   <div id="overlay">
     <div class="hint">Move mouse: parallax · Click fish: freeze/vanish · <kbd>H</kbd>: hide bubbles</div>
     <div class="title">Aquarium of Existential Fish</div>
