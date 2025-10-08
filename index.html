@@ -74,48 +74,98 @@
     });
 
     const PHRASES=['i am not real','today i forgot myself','be kind to the void','do fish dream?','404: meaning not found','blink slowly','pretend to be water','becoming … becoming','a small thought floats'];
-    function makeBubbleSprite(t){
+    function makeBubbleSprite(text){
       const w=256,h=128;const c=document.createElement('canvas');c.width=w;c.height=h;
-      const x=c.getContext('2d');x.fillStyle='rgba(0,0,0,0.24)';x.strokeStyle='rgba(220,255,250,0.75)';x.lineWidth=2;
-      x.beginPath();x.moveTo(14,8);x.arcTo(w-8,8,w-8,h-8,14);x.arcTo(w-8,h-8,8,h-8,14);x.arcTo(8,h-8,8,8,14);x.arcTo(8,8,w-8,8,14);x.closePath();x.fill();x.stroke();
-      x.font='600 22px ui-monospace, monospace';x.fillStyle='rgba(235,255,250,0.98)';x.textAlign='center';x.textBaseline='middle';x.fillText(t,w/2,h/2);
+      const x=c.getContext('2d');
+      x.fillStyle='rgba(0,0,0,0.35)';
+      x.strokeStyle='rgba(255,255,255,0.85)';x.lineWidth=3;
+      x.beginPath();x.moveTo(14,8);x.arcTo(w-8,8,w-8,h-8,14);x.arcTo(w-8,h-8,8,h-8,14);
+      x.arcTo(8,h-8,8,8,14);x.arcTo(8,8,w-8,8,14);x.closePath();x.fill();x.stroke();
+      x.font='600 22px ui-monospace, monospace';x.fillStyle='rgba(235,255,250,0.98)';
+      x.textAlign='center';x.textBaseline='middle';x.fillText(text,w/2,h/2);
       const tex=new THREE.CanvasTexture(c);
       const mat=new THREE.SpriteMaterial({map:tex,transparent:true,depthWrite:false});
-      const s=new THREE.Sprite(mat);s.scale.set(2.2,1.1,1);s.userData={ctx:x,texture:tex};return s;
+      const s=new THREE.Sprite(mat);s.scale.set(2.2,1.1,1);
+      s.userData={ctx:x,texture:tex};
+      return s;
     }
     function updateBubbleText(s,t){
       const {ctx,texture}=s.userData;const w=256,h=128;
-      ctx.clearRect(0,0,w,h);ctx.fillStyle='rgba(0,0,0,0.24)';ctx.fillRect(0,0,w,h);
-      ctx.font='600 22px ui-monospace, monospace';ctx.fillStyle='rgba(235,255,250,0.98)';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(t,w/2,h/2);texture.needsUpdate=true;
+      ctx.clearRect(0,0,w,h);
+      ctx.fillStyle='rgba(0,0,0,0.35)';
+      ctx.strokeStyle='rgba(255,255,255,0.85)';ctx.lineWidth=3;
+      ctx.beginPath();ctx.moveTo(14,8);ctx.arcTo(w-8,8,w-8,h-8,14);
+      ctx.arcTo(w-8,h-8,8,h-8,14);ctx.arcTo(8,h-8,8,8,14);ctx.arcTo(8,8,w-8,8,14);
+      ctx.closePath();ctx.fill();ctx.stroke();
+      ctx.font='600 22px ui-monospace, monospace';ctx.fillStyle='rgba(235,255,250,0.98)';
+      ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(t,w/2,h/2);
+      texture.needsUpdate=true;
     }
 
-    const NATURAL_BASES=['#d9e1e8','#9bb3a1','#74a6b3','#e2b35a','#e39b7a'];
+    // more saturated hue variety
+    const BASES=['#e3a673','#72b1e2','#6fe0a6','#ef697a','#c6b46b','#b17fe3','#63d0dd','#ef995e'];
     function canvasFishTexture(seed){
-      const w=512,h=256;const c=document.createElement('canvas');c.width=w;c.height=h;const g=c.getContext('2d');
-      const col=new THREE.Color(seed);const belly=col.clone().lerp(new THREE.Color('#fff'),0.4);const back=col.clone().lerp(new THREE.Color('#111'),0.22);
-      const grd=g.createLinearGradient(0,0,0,h);grd.addColorStop(0,`#${belly.getHexString()}`);grd.addColorStop(0.55,`#${col.getHexString()}`);grd.addColorStop(1,`#${back.getHexString()}`);
+      const w=512,h=256;const c=document.createElement('canvas');c.width=w;c.height=h;
+      const g=c.getContext('2d');
+      const base=new THREE.Color(seed);
+      const belly=base.clone().lerp(new THREE.Color('#fff'),0.55);
+      const back =base.clone().lerp(new THREE.Color('#000'),0.35);
+      const grd=g.createLinearGradient(0,0,0,h);
+      grd.addColorStop(0,`#${belly.getHexString()}`);
+      grd.addColorStop(0.5,`#${base.getHexString()}`);
+      grd.addColorStop(1,`#${back.getHexString()}`);
       g.fillStyle=grd;g.fillRect(0,0,w,h);
-      g.strokeStyle='rgba(255,255,255,0.25)';g.lineWidth=2;g.beginPath();for(let x=0;x<=w;x+=18){g.lineTo(x,h*0.56+Math.sin(x*0.02)*1.8);}g.stroke();
-      g.globalAlpha=0.06;for(let x=0;x<w;x+=20){const fade=(Math.sin(x*0.035)+1)/2*0.5+0.2;g.fillStyle=`rgba(255,255,255,${fade})`;g.fillRect(x,0,6,h);}g.globalAlpha=1;
-      const d=g.createImageData(w,h);for(let i=0;i<w*h;i+=18){const k=(i*4);d.data[k]=d.data[k+1]=d.data[k+2]=255;d.data[k+3]=Math.random()*18|0;}g.putImageData(d,0,0);
-      const tex=new THREE.CanvasTexture(c);tex.anisotropy=renderer.capabilities.getMaxAnisotropy();return tex;
+
+      // bolder stripes and dots
+      g.globalAlpha=0.35;
+      for(let x=0;x<w;x+=14){
+        const fade=(Math.sin(x*0.07)+1)/2*0.8+0.2;
+        g.fillStyle=`rgba(255,255,255,${fade*0.4})`;
+        g.fillRect(x,0,6,h);
+      }
+      g.globalAlpha=1;
+      // speckled dots for scales
+      for(let i=0;i<2000;i++){
+        const xx=Math.random()*w,yy=Math.random()*h;
+        g.fillStyle=`rgba(255,255,255,${Math.random()*0.25})`;
+        g.beginPath();g.arc(xx,yy,Math.random()*1.5,0,Math.PI*2);g.fill();
+      }
+      // lateral line
+      g.strokeStyle='rgba(255,255,255,0.45)';g.lineWidth=2;
+      g.beginPath();
+      for(let x=0;x<w;x+=10){g.lineTo(x,h*0.55+Math.sin(x*0.05)*2);}
+      g.stroke();
+
+      const tex=new THREE.CanvasTexture(c);
+      tex.anisotropy=renderer.capabilities.getMaxAnisotropy();
+      return tex;
     }
-    function makeMat(seed){return new THREE.MeshStandardMaterial({map:canvasFishTexture(seed),color:0xffffff,roughness:0.35,metalness:0.28,emissive:new THREE.Color(0x1a1a1a),emissiveIntensity:0.25,flatShading:true});}
+    function makeMat(seed){
+      return new THREE.MeshStandardMaterial({
+        map:canvasFishTexture(seed),
+        color:0xffffff,
+        roughness:0.3,
+        metalness:0.3,
+        emissive:new THREE.Color(0x1a1a1a),
+        emissiveIntensity:0.3,
+        flatShading:true
+      });
+    }
 
     const BOUNDS={x:5.8,y:2.9,z:3.8};
     class Fish{
       constructor(){
         this.group=new THREE.Group();
-        const body=new THREE.Mesh(new THREE.IcosahedronGeometry(rand(0.25,0.38),0),makeMat(choose(NATURAL_BASES)));
+        const body=new THREE.Mesh(new THREE.IcosahedronGeometry(rand(0.25,0.38),0),makeMat(choose(BASES)));
         body.scale.set(rand(1.6,2.1),1,1);this.group.add(body);
+        const finMat=new THREE.MeshStandardMaterial({color:0xffffff,roughness:0.5,metalness:0.2});
         const tailGeo=new THREE.ConeGeometry(0.2,0.35,3);tailGeo.rotateZ(Math.PI/2);tailGeo.translate(-0.5,0,0);
-        this.group.add(new THREE.Mesh(tailGeo,new THREE.MeshStandardMaterial({color:0xffffff,roughness:0.5,metalness:0.2})));
+        this.group.add(new THREE.Mesh(tailGeo,finMat));
         const finGeo=new THREE.ConeGeometry(0.08,0.18,3);
-        const fin=new THREE.Mesh(finGeo,new THREE.MeshStandardMaterial({color:0xffffff,roughness:0.5,metalness:0.2}));
-        fin.position.set(0.1,-0.1,0.18);fin.rotation.z=-Math.PI/3;this.group.add(fin);
+        const fin=new THREE.Mesh(finGeo,finMat);fin.position.set(0.1,-0.1,0.18);fin.rotation.z=-Math.PI/3;this.group.add(fin);
         const fin2=fin.clone();fin2.position.z*=-1;fin2.rotation.y=Math.PI;this.group.add(fin2);
-        const eyes=new THREE.SphereGeometry(0.04,12,12);const eyeMat=new THREE.MeshStandardMaterial({color:0xffffff,roughness:0.12,metalness:0.3});
-        const el=new THREE.Mesh(eyes,eyeMat);el.position.set(0.4,0.06,0.12);this.group.add(el);const er=el.clone();er.position.z*=-1;this.group.add(er);
+        const eyeGeo=new THREE.SphereGeometry(0.04,12,12);const eyeMat=new THREE.MeshStandardMaterial({color:0xffffff,roughness:0.12,metalness:0.3});
+        const el=new THREE.Mesh(eyeGeo,eyeMat);el.position.set(0.4,0.06,0.12);this.group.add(el);const er=el.clone();er.position.z*=-1;this.group.add(er);
         this.bubble=makeBubbleSprite(choose(PHRASES));this.bubble.position.set(0,0.9,0);this.group.add(this.bubble);
         this.group.position.set(rand(-4,4),rand(-1.2,2.2),rand(-2.5,2.5));
         this.vel=new THREE.Vector3(rand(-0.02,0.02),rand(-0.01,0.01),rand(-0.015,0.015));
