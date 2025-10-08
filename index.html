@@ -3,30 +3,28 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Aquarium of Existential Fish</title>
+  <title>Aquarium of Existential Fish — Iridescent Shader</title>
   <style>
     html,body{
-      height:100%;margin:0;overflow:hidden;
-      /* base gradient: lighter top → darker bottom */
-      background:linear-gradient(to bottom,#7fcde4 0%,#3b63c0 45%,#15053a 100%);
-      /* smooth hue drift without visible jumps */
-      animation:hueDrift 160s linear infinite alternate;
+      height:100%; margin:0; overflow:hidden;
+      /* Lighter top → darker bottom; only cool spectrum; smooth hue drift with no jumps */
+      background: linear-gradient(to bottom, #75c6e6 0%, #365eb6 45%, #14063d 100%);
+      animation: hueDrift 160s linear infinite alternate;
     }
     @keyframes hueDrift{
       0%   { filter: hue-rotate(0deg); }
-      50%  { filter: hue-rotate(60deg); }
-      100% { filter: hue-rotate(120deg); }
+      50%  { filter: hue-rotate(45deg); }
+      100% { filter: hue-rotate(90deg); }
     }
-    canvas{display:block}
-
+    canvas{ display:block }
     #overlay{
-      position:fixed;inset:0;pointer-events:none;z-index:3;
-      display:flex;align-items:flex-end;justify-content:flex-end;
+      position:fixed; inset:0; pointer-events:none; z-index:3;
+      display:flex; align-items:flex-end; justify-content:flex-end;
       padding:12px 14px;
-      font-family:ui-monospace,Menlo,Consolas,monospace;
-      color:#b3f4ff;text-shadow:0 1px 2px rgba(0,0,0,.25);
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+      color:#b3f4ff; text-shadow:0 1px 2px rgba(0,0,0,.25);
     }
-    #overlay .title{font-weight:700;letter-spacing:.5px;font-size:12px;color:#9effc7}
+    #overlay .title{ font-weight:700; letter-spacing:.5px; font-size:12px; color:#9effc7; }
   </style>
 </head>
 <body>
@@ -61,20 +59,15 @@
     const rand = (a,b) => a + Math.random()*(b-a);
     const choose = a => a[(Math.random()*a.length)|0];
     const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+    function lerpAngle(a, b, t){ let d=(b-a+Math.PI)%(2*Math.PI)-Math.PI; return a + d*t; }
 
-    // Shortest-path angle interpolation
-    function lerpAngle(a, b, t){
-      let diff = (b - a + Math.PI) % (2*Math.PI) - Math.PI;
-      return a + diff * t;
-    }
-
-    /* ===== Mouse: world projection + horizontal pan + avoidance ===== */
+    /* ===== Mouse: world projection + horizontal pan + subtle avoidance ===== */
     const raycaster = new THREE.Raycaster();
     const mouseNDC = new THREE.Vector2();
     const plane    = new THREE.Plane(new THREE.Vector3(0,0,1), 0);
     const mouseWorld = new THREE.Vector3(999,999,0); // far away initially
     let mouseX = 0;
-    const panRange = 1.4;
+    const panRange = 1.2;
 
     addEventListener('mousemove', e=>{
       mouseX = (e.clientX/innerWidth)*2 - 1;
@@ -103,7 +96,7 @@
       const c=document.createElement('canvas'); c.width=w; c.height=h;
       const x=c.getContext('2d');
 
-      // background + outline
+      // outline + fill
       x.fillStyle='rgba(0,0,0,0.35)';
       x.strokeStyle='rgba(255,255,255,0.85)'; x.lineWidth=3;
       x.beginPath();
@@ -114,20 +107,17 @@
       x.arcTo(8,8,w-8,8,14);
       x.closePath(); x.fill(); x.stroke();
 
-      // text
+      // quick wrap
       x.font='600 22px ui-monospace, monospace';
       x.fillStyle='rgba(235,255,250,0.98)';
       x.textAlign='center'; x.textBaseline='middle';
-      // wrap (quick two-line approach)
-      const lines=[]; const words=text.split(' ');
-      let line='';
-      for(const w2 of words){
-        const test=line?line+' '+w2:w2;
-        if(x.measureText(test).width> w-36){ lines.push(line); line=w2; } else line=test;
+      const words=text.split(' '); const lines=[]; let line='';
+      for(const w2 of words){ const t=line?line+' '+w2:w2;
+        if(x.measureText(t).width > w-36){ lines.push(line); line=w2; } else line=t;
       }
       if(line) lines.push(line);
-      const startY = h/2 - (lines.length-1)*14;
-      lines.forEach((L,i)=> x.fillText(L, w/2, startY + i*28));
+      const startY=h/2 - (lines.length-1)*14;
+      lines.forEach((L,i)=>x.fillText(L,w/2,startY+i*28));
 
       const tex=new THREE.CanvasTexture(c);
       const mat=new THREE.SpriteMaterial({ map:tex, transparent:true, depthWrite:false });
@@ -136,61 +126,146 @@
       return s;
     }
 
-    /* ===== Fish materials & textures ===== */
-    function fishTexture(seedHex){
-      const w=512,h=256, cvs=document.createElement('canvas'); cvs.width=w; cvs.height=h;
-      const g=cvs.getContext('2d');
+    /* ===== Custom GLSL: Iridescent Scales Shader (7s cycle) ===== */
+    const fishVertexShader = /* glsl */`
+      varying vec3 vWorldPos;
+      varying vec3 vWorldNormal;
+      varying vec2 vUv;
+      uniform float uTime;
+      uniform float uTailPhase;  // for subtle body undulation
 
-      const base = new THREE.Color(seedHex);
-      const belly= base.clone().lerp(new THREE.Color('#ffffff'), 0.55);
-      const back = base.clone().lerp(new THREE.Color('#000000'), 0.35);
+      void main(){
+        vUv = uv;
 
-      const grad = g.createLinearGradient(0,0,0,h);
-      grad.addColorStop(0.00, `#${belly.getHexString()}`);
-      grad.addColorStop(0.50, `#${base.getHexString()}`);
-      grad.addColorStop(1.00, `#${back.getHexString()}`);
-      g.fillStyle = grad; g.fillRect(0,0,w,h);
+        // Subtle whole-body undulation (wobble along Z by X)
+        float wobble = 0.02 * sin(uTime*2.0 + position.x*6.0 + uTailPhase);
+        vec3 pos = position + vec3(0.0, 0.0, wobble);
 
-      // bold-ish vertical stripes (still natural-ish)
-      g.globalAlpha = 0.35;
-      for(let x=0; x<w; x+=14){
-        g.fillStyle = `rgba(255,255,255,${0.3 + Math.random()*0.2})`;
-        g.fillRect(x, 0, 6, h);
+        vec4 worldPos = modelMatrix * vec4(pos, 1.0);
+        vWorldPos = worldPos.xyz;
+
+        // Transform normal to world space
+        vWorldNormal = normalize( mat3(modelMatrix) * normal );
+
+        gl_Position = projectionMatrix * viewMatrix * worldPos;
       }
-      g.globalAlpha = 1;
+    `;
 
-      // speckled scales
-      for(let i=0;i<1400;i++){
-        g.fillStyle=`rgba(255,255,255,${Math.random()*0.25})`;
-        g.fillRect(Math.random()*w, Math.random()*h, 1.5, 1.5);
+    const fishFragmentShader = /* glsl */`
+      precision highp float;
+      varying vec3 vWorldPos;
+      varying vec3 vWorldNormal;
+      varying vec2 vUv;
+
+      uniform vec3  uBaseColor;
+      uniform vec3  uViewPos;
+      uniform float uTime;
+      uniform float uOpacity;
+      uniform float uIriPhase;
+
+      // Hue rotation helper
+      vec3 hsv2rgb(vec3 c){
+        vec3 rgb = clamp( abs(mod(c.x*6.0 + vec3(0.0,4.0,2.0), 6.0)-3.0)-1.0, 0.0, 1.0 );
+        rgb = rgb*rgb*(3.0-2.0*rgb); // smoothstep
+        return c.z * mix(vec3(1.0), rgb, c.y);
       }
 
-      const tex = new THREE.CanvasTexture(cvs);
-      tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-      return tex;
-    }
+      // Hex tiling for scale centers
+      // returns nearest hex-cell center coords and local coord
+      vec2 hex(vec2 p){
+        // hex grid conversion
+        vec2 q = vec2( p.x*2.0/1.7320508, p.y - (mod(floor(p.x*2.0/1.7320508)+1000.0,2.0)-1.0)*0.5 );
+        vec2 b = floor(q);
+        vec2 r = q - b;
 
-    function bodyMaterial(hex){
-      return new THREE.MeshStandardMaterial({
-        map: fishTexture(hex),
-        color: 0xffffff,
-        roughness: 0.3,
-        metalness: 0.3,
-        emissive: new THREE.Color(0x1a1a1a),
-        emissiveIntensity: 0.3,
-        transparent: true
+        vec2 g1 = vec2(b.x, b.y);
+        vec2 g2 = vec2(b.x+1.0, b.y + (mod(b.x+1000.0,2.0) < 1.0 ? 0.0 : 1.0));
+        vec2 g3 = vec2(b.x+1.0, b.y + (mod(b.x+1001.0,2.0) < 1.0 ? -1.0 : 0.0));
+
+        // nearest of three candidates
+        vec2 p1 = g1, p2 = g2, p3 = g3;
+        vec2 h1 = vec2(p1.x*0.8660254, p1.y + (mod(p1.x+1000.0,2.0)<1.0?0.0:0.5));
+        vec2 h2 = vec2(p2.x*0.8660254, p2.y + (mod(p2.x+1000.0,2.0)<1.0?0.0:0.5));
+        vec2 h3 = vec2(p3.x*0.8660254, p3.y + (mod(p3.x+1000.0,2.0)<1.0?0.0:0.5));
+
+        float d1 = distance(p, h1);
+        float d2 = distance(p, h2);
+        float d3 = distance(p, h3);
+
+        vec2 hc = (d1<d2 && d1<d3) ? h1 : (d2<d3 ? h2 : h3);
+        return hc;
+      }
+
+      void main(){
+        // View & light directions
+        vec3 N = normalize(vWorldNormal);
+        vec3 V = normalize(uViewPos - vWorldPos);
+
+        // Base UV scale — tighter tiles = smaller scales
+        vec2 uv = vUv * vec2(14.0, 8.0);
+
+        // Time-varying iridescent hue (7s cycle)
+        float cycle = 6.2831853 / 7.0; // 2π/7
+        float hue   = mod( (uTime + uIriPhase)*cycle*0.16, 1.0 ); // slow hue change
+        // Mix cool & warm via hue; higher saturation in highlights
+        vec3 iriColor = hsv2rgb(vec3(hue, 0.75, 1.0));
+
+        // Hex-based scale cell center
+        vec2 h = hex(uv);
+        float distToCenter = distance(uv, h);
+
+        // Scale disk (feathered edge)
+        float scaleMask = smoothstep(0.6, 0.0, distToCenter); // 1 at center, 0 outside
+
+        // Fresnel-like view term to make edges glint
+        float fres = pow(1.0 - max(dot(N, V), 0.0), 3.0);
+
+        // Subtle cellular modulation inside scale to fake ridges
+        float ring = 0.25 + 0.75 * smoothstep(0.5, 0.15, distToCenter);
+
+        // Base color
+        vec3 base = uBaseColor;
+
+        // Combine: base + iridescent highlight modulated by scale mask, fresnel and slow time pulsing
+        float pulse = 0.6 + 0.4*sin((uTime + uIriPhase)*cycle*1.0);
+        vec3 color = base * (0.55 + 0.45*ring)
+                   + iriColor * (scaleMask * (0.35*fres + 0.2*pulse));
+
+        // Gentle spec boost
+        float spec = pow(max(dot(reflect(-V, N), V), 0.0), 24.0);
+        color += 0.12 * spec;
+
+        gl_FragColor = vec4(color, uOpacity);
+      }
+    `;
+
+    function makeFishBodyMaterial(baseHex, iriPhase){
+      const base = new THREE.Color(baseHex);
+      const mat = new THREE.ShaderMaterial({
+        vertexShader: fishVertexShader,
+        fragmentShader: fishFragmentShader,
+        transparent: true,
+        uniforms: {
+          uTime:      { value: 0 },
+          uOpacity:   { value: 1 },
+          uBaseColor: { value: new THREE.Color(base) },
+          uViewPos:   { value: new THREE.Vector3() },
+          uIriPhase:  { value: iriPhase },
+          uTailPhase: { value: Math.random()*Math.PI*2 }
+        }
       });
+      return mat;
     }
 
-    // Fins/tails: translucent with faint blue luminescent outline
+    /* ===== Fins/Tails materials (translucent with blue luminescent edge) ===== */
     function finMaterial(baseHex){
       const col = new THREE.Color(baseHex).lerp(new THREE.Color('#ffffff'), 0.35);
       return new THREE.MeshStandardMaterial({
         color: col,
         roughness: 0.5,
-        metalness: 0.15,
-        emissive: new THREE.Color(0x3758ff),   // subtle blue glow
-        emissiveIntensity: 0.15,
+        metalness: 0.1,
+        emissive: new THREE.Color(0x355cff),
+        emissiveIntensity: 0.16,
         transparent: true,
         opacity: 0.55,
         side: THREE.DoubleSide,
@@ -199,91 +274,72 @@
       });
     }
 
-    // Eyes: now transparent-aware so they fade with body
     function eyeMaterial(){
-      return new THREE.MeshBasicMaterial({
-        color: 0x000000,
-        transparent: true,
-        opacity: 1.0
-      });
+      return new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 1 });
     }
 
     /* ===== Elegant fish model ===== */
     function createFishModel(hex){
       const group = new THREE.Group();
 
-      // Body (elongated sphere)
-      const body = new THREE.Mesh(
-        new THREE.SphereGeometry(0.36, 24, 16),
-        bodyMaterial(hex)
-      );
+      // Body (ellipsoid) with iridescent shader
+      const bodyGeo = new THREE.SphereGeometry(0.36, 28, 20);
+      const bodyMat = makeFishBodyMaterial(hex, Math.random()*10.0);
+      const body = new THREE.Mesh(bodyGeo, bodyMat);
       body.scale.set(1.9, 1.0, 0.85);
       group.add(body);
 
-      // Forked tail (two long thin planes)
+      // Forked, long translucent tail (2 ribbons)
       const tailMat = finMaterial(hex);
-      const tailW = 0.7, tailH = 0.5;
-      const tailGeo = new THREE.PlaneGeometry(tailW, tailH, 1, 3);
-      // add slight curve in geometry for flow
-      const pos = tailGeo.attributes.position;
-      for(let i=0; i<pos.count; i++){
-        const y = pos.getY(i);
-        const bend = (y / tailH) * 0.06;
-        pos.setZ(i, bend);
-      }
-      pos.needsUpdate = true;
-
+      const tailGeo = new THREE.PlaneGeometry(0.8, 0.55, 1, 4);
       const tailL = new THREE.Mesh(tailGeo, tailMat);
       const tailR = new THREE.Mesh(tailGeo, tailMat.clone());
-      tailL.position.set(-1.0, 0.0, 0.12);
-      tailR.position.set(-1.0, 0.0, -0.12);
+      tailL.position.set(-1.02, 0, 0.12);
+      tailR.position.set(-1.02, 0, -0.12);
       tailL.rotation.y = Math.PI * 0.5;
       tailR.rotation.y = Math.PI * 0.5;
       group.add(tailL, tailR);
 
-      // Dorsal & ventral long fins (ribbons)
-      const finGeo = new THREE.PlaneGeometry(0.9, 0.28, 1, 4);
-      const finTop = new THREE.Mesh(finGeo, finMaterial(hex));
-      const finBot = new THREE.Mesh(finGeo, finMaterial(hex));
-      finTop.position.set(0.1, 0.22, 0.0);
-      finBot.position.set(0.05, -0.22, 0.0);
-      finTop.rotation.x = -Math.PI/12;
-      finBot.rotation.x = Math.PI/12;
+      // Dorsal & ventral long fins
+      const longFinGeo = new THREE.PlaneGeometry(1.0, 0.3, 1, 5);
+      const finTop = new THREE.Mesh(longFinGeo, finMaterial(hex));
+      const finBot = new THREE.Mesh(longFinGeo, finMaterial(hex));
+      finTop.position.set(0.1, 0.24, 0.0);  finTop.rotation.x = -Math.PI/12;
+      finBot.position.set(0.05,-0.24, 0.0); finBot.rotation.x =  Math.PI/12;
       group.add(finTop, finBot);
 
-      // Pectoral fins (left/right)
-      const pecGeo = new THREE.PlaneGeometry(0.4, 0.18, 1, 2);
+      // Pectoral fins
+      const pecGeo = new THREE.PlaneGeometry(0.45, 0.2, 1, 2);
       const pecL = new THREE.Mesh(pecGeo, finMaterial(hex));
       const pecR = new THREE.Mesh(pecGeo, finMaterial(hex));
-      pecL.position.set(0.25, -0.08, 0.32);
-      pecR.position.set(0.25, -0.08, -0.32);
+      pecL.position.set(0.28, -0.08, 0.33);
+      pecR.position.set(0.28, -0.08,-0.33);
       pecL.rotation.set(0, Math.PI/2.6,  Math.PI/12);
-      pecR.rotation.set(0, -Math.PI/2.6, -Math.PI/12);
+      pecR.rotation.set(0,-Math.PI/2.6, -Math.PI/12);
       group.add(pecL, pecR);
 
-      // Eyes (small spheres)
+      // Eyes
       const eyeGeo = new THREE.SphereGeometry(0.04, 12, 12);
       const eyeL = new THREE.Mesh(eyeGeo, eyeMaterial());
       const eyeR = eyeL.clone();
-      eyeL.position.set(0.55, 0.08, 0.17);
-      eyeR.position.set(0.55, 0.08, -0.17);
+      eyeL.position.set(0.55, 0.08, 0.18);
+      eyeR.position.set(0.55, 0.08,-0.18);
       group.add(eyeL, eyeR);
 
-      // Simple mouth: small dark disk scaling in/out to "gape"
+      // Mouth (deep red, larger than eyes, flush with head)
       const mouth = new THREE.Mesh(
-        new THREE.CircleGeometry(0.045, 16),
-        new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.9 })
+        new THREE.CircleGeometry(0.075, 24),
+        new THREE.MeshBasicMaterial({ color: 0xaa2222, transparent: true, opacity: 1.0 })
       );
-      mouth.position.set(0.75, 0.02, 0.0);
+      mouth.position.set(0.72, 0.02, 0.0); // slightly into the head to look attached
       mouth.rotation.y = Math.PI/2;
       group.add(mouth);
 
-      // Save references for animation
-      group.userData = { body, tailL, tailR, finTop, finBot, pecL, pecR, mouth, eyes:[eyeL, eyeR] };
+      group.userData = { body, bodyMat, tailL, tailR, finTop, finBot, pecL, pecR, eyes:[eyeL,eyeR], mouth };
       return group;
     }
 
-    /* ===== Fish class ===== */
+    /* ===== Fish class (calm drift + gentle avoidance + smooth turning) ===== */
     const BOUNDS = { x: 5.8, y: 2.9, z: 3.8 };
 
     class Fish {
@@ -293,18 +349,21 @@
         this.thought.position.set(0, 0.95, 0);
         this.group.add(this.thought);
 
+        // initial placement & motion
         this.group.position.set(rand(-4,4), rand(-1.2,2.2), rand(-2.5,2.5));
-        this.vel = new THREE.Vector3(rand(-0.02,0.02), rand(-0.01,0.01), rand(-0.015,0.015));
-        this.speed = rand(0.004, 0.016);
+        this.vel = new THREE.Vector3(rand(-0.01,0.01), rand(-0.005,0.005), rand(-0.008,0.008));
+        this.speed = rand(0.003, 0.010);
         this.dead = false;
 
-        // Animation phases
-        this.tailPhase = Math.random() * Math.PI*2;
-        this.finPhase  = Math.random() * Math.PI*2;
-        this.mouthPhase= Math.random() * Math.PI*2;
+        // drift phases
+        this.tailPhase = Math.random()*Math.PI*2;
+        this.finPhase  = Math.random()*Math.PI*2;
+        this.mouthPhase= Math.random()*Math.PI*2;
+        this.driftPhase= Math.random()*Math.PI*2;
 
-        // For smooth heading interpolation
-        this.heading = 0; // current yaw
+        // orientation
+        this.heading = 0;
+
         scene.add(this.group);
       }
 
@@ -312,7 +371,7 @@
         if (this.dead) return;
         this.dead = true;
 
-        // Remove current thought bubble immediately to avoid overlap
+        // remove existing thought bubble immediately
         this.group.remove(this.thought); scene.remove(this.thought);
 
         const farewell = makeBubbleSprite("i will remember this.");
@@ -321,11 +380,13 @@
 
         const start = performance.now();
         const fadeOut = () => {
-          const t = (performance.now() - start) / 1500; // 1.5s
-          // Traverse all meshes, including eyes/fins/tails/body & mouth
-          this.group.traverse(obj=>{
-            if (obj.material) {
-              obj.material.opacity = clamp(1 - t, 0, 1);
+          const t = (performance.now() - start) / 1500;
+          // body shader opacity
+          this.group.userData.bodyMat.uniforms.uOpacity.value = clamp(1 - t, 0, 1);
+          // standard mats
+          this.group.traverse(o=>{
+            if(o.material && o.material !== this.group.userData.bodyMat){
+              if('opacity' in o.material) o.material.opacity = clamp(1 - t, 0, 1);
             }
           });
           if (t < 1) requestAnimationFrame(fadeOut);
@@ -347,92 +408,103 @@
       update(dt, time){
         if (this.dead) return;
 
-        // Gentle mouse avoidance
+        const UD = this.group.userData;
+
+        // ===== Calm drift: small sinusoidal steering + gentle wander =====
+        const driftTurn = Math.sin(time*0.5 + this.driftPhase) * 0.003;  // slow turning
+        const driftLift = Math.cos(time*0.4 + this.driftPhase) * 0.0008; // gentle vertical
+
+        this.vel.x += driftTurn;
+        this.vel.y += driftLift;
+        this.vel.z += Math.sin(time*0.37 + this.driftPhase)*0.0009;
+
+        // ===== Subtle mouse avoidance (short radius + low strength) =====
         const toMouse = new THREE.Vector3().subVectors(this.group.position, mouseWorld);
         const dist = toMouse.length();
-        const radius = 3.0;
+        const radius = 1.4; // smaller radius
         if (Number.isFinite(dist) && dist < radius){
           const s = (radius - dist) / radius;
           toMouse.normalize();
-          this.vel.addScaledVector(toMouse, s * 0.05);
+          this.vel.addScaledVector(toMouse, s * 0.015); // reduced strength
         }
 
-        // Apply velocity
+        // velocity damping to avoid ping-pong behavior
+        this.vel.multiplyScalar(0.985);
+
+        // clamp overall speed
+        if (this.vel.length() > this.speed) this.vel.setLength(this.speed);
+
+        // move
         this.group.position.addScaledVector(this.vel, dt * 60);
 
-        // Bounds bounce
-        const p = this.group.position, v = this.vel;
-        if (p.x < -BOUNDS.x){ p.x = -BOUNDS.x; v.x = Math.abs(v.x); }
-        if (p.x >  BOUNDS.x){ p.x =  BOUNDS.x; v.x = -Math.abs(v.x); }
-        if (p.y < -BOUNDS.y){ p.y = -BOUNDS.y; v.y = Math.abs(v.y); }
-        if (p.y >  BOUNDS.y){ p.y =  BOUNDS.y; v.y = -Math.abs(v.y); }
-        if (p.z < -BOUNDS.z){ p.z = -BOUNDS.z; v.z = Math.abs(v.z); }
-        if (p.z >  BOUNDS.z){ p.z =  BOUNDS.z; v.z = -Math.abs(v.z); }
+        // bounds (soft bounce)
+        const p=this.group.position, v=this.vel;
+        if (p.x<-BOUNDS.x){ p.x=-BOUNDS.x; v.x=Math.abs(v.x)*0.8; }
+        if (p.x> BOUNDS.x){ p.x= BOUNDS.x; v.x=-Math.abs(v.x)*0.8; }
+        if (p.y<-BOUNDS.y){ p.y=-BOUNDS.y; v.y=Math.abs(v.y)*0.8; }
+        if (p.y> BOUNDS.y){ p.y= BOUNDS.y; v.y=-Math.abs(v.y)*0.8; }
+        if (p.z<-BOUNDS.z){ p.z=-BOUNDS.z; v.z=Math.abs(v.z)*0.8; }
+        if (p.z> BOUNDS.z){ p.z= BOUNDS.z; v.z=-Math.abs(v.z)*0.8; }
 
-        // Smooth turn toward movement direction (yaw about Y)
+        // smooth orientation toward velocity
         const dir = this.vel.clone().normalize();
         if (dir.lengthSq() > 0.00001){
-          const targetYaw = Math.atan2(-dir.z, dir.x); // +X is forward
-          this.heading = lerpAngle(this.heading, targetYaw, clamp(2.5*dt, 0, 1)); // turn rate
+          const targetYaw = Math.atan2(-dir.z, dir.x);
+          this.heading = lerpAngle(this.heading, targetYaw, clamp(2.2*dt, 0, 1));
           this.group.rotation.y = this.heading;
-
-          // tiny roll for life
-          this.group.rotation.z = Math.sin(time*0.8 + this.tailPhase)*0.03;
+          this.group.rotation.z = Math.sin(time*0.7 + this.tailPhase)*0.03; // tiny roll
         }
 
-        // Animate mouth (gentle gape)
-        const { mouth, tailL, tailR, finTop, finBot, pecL, pecR } = this.group.userData;
-        const mouthOpen = (Math.sin(time*2.0 + this.mouthPhase)*0.5 + 0.5)*0.3 + 0.85; // 0.85..1.15
-        mouth.scale.set(1, mouthOpen, 1);
-
-        // Tail & fin wobble (realistic amplitude)
-        const tailAngle = Math.sin(time*2.0 + this.tailPhase) * THREE.MathUtils.degToRad(10); // ~±10°
-        tailL.rotation.z = tailAngle;
-        tailR.rotation.z = -tailAngle;
-
-        const finAng = Math.sin(time*1.6 + this.finPhase) * THREE.MathUtils.degToRad(5); // ~±5°
-        finTop.rotation.z = finAng;
-        finBot.rotation.z = -finAng;
-
+        // fins & tail wobble (realistic amplitude)
+        const tailAngle = Math.sin(time*2.0 + this.tailPhase) * THREE.MathUtils.degToRad(10);
+        UD.tailL.rotation.z =  tailAngle;
+        UD.tailR.rotation.z = -tailAngle;
+        const finAng = Math.sin(time*1.6 + this.finPhase) * THREE.MathUtils.degToRad(5);
+        UD.finTop.rotation.z =  finAng;
+        UD.finBot.rotation.z = -finAng;
         const pecAng = Math.sin(time*2.2 + this.finPhase)*THREE.MathUtils.degToRad(6);
-        pecL.rotation.x = pecAng/2; pecR.rotation.x = -pecAng/2;
+        UD.pecL.rotation.x =  pecAng*0.5;
+        UD.pecR.rotation.x = -pecAng*0.5;
 
-        // Keep thought bubble facing camera
+        // mouth breathing (attached & larger/red)
+        const mouthOpen = (Math.sin(time*2.0 + this.mouthPhase)*0.5+0.5)*0.25 + 0.9; // 0.9..1.15
+        UD.mouth.scale.set(1, mouthOpen, 1);
+
+        // shader uniforms update
+        UD.bodyMat.uniforms.uTime.value = time;
+        UD.bodyMat.uniforms.uViewPos.value.copy(camera.position);
+
+        // thought bubble faces camera
         this.thought.lookAt(camera.position);
       }
     }
 
-    /* ===== Build fish with distinct hues (14 total) ===== */
+    /* ===== Build 14 fish with distinct hues ===== */
     const FISH = [];
     for (let i=0;i<14;i++){
       const col = new THREE.Color().setHSL(i/14, 0.85, 0.55);
       FISH.push( new Fish(`#${col.getHexString()}`) );
     }
 
-    // Click-to-fade
+    /* ===== Click-to-fade ===== */
     addEventListener('click', e=>{
       mouseNDC.x = (e.clientX/innerWidth)*2 - 1;
       mouseNDC.y = -(e.clientY/innerHeight)*2 + 1;
       raycaster.setFromCamera(mouseNDC, camera);
 
-      // Intersect against all meshes inside fish groups (body is enough, but include others for reliability)
       const candidates = [];
-      for (const f of FISH){
-        f.group.traverse(obj=>{ if (obj.isMesh) candidates.push(obj); });
-      }
+      for (const f of FISH){ f.group.traverse(obj=>{ if(obj.isMesh) candidates.push(obj); }); }
       const hits = raycaster.intersectObjects(candidates, true);
       if (hits.length){
         const hit = hits[0].object;
         const fish = FISH.find(ff=>{
-          let found=false;
-          ff.group.traverse(o=>{ if(o===hit) found=true; });
-          return found;
+          let found=false; ff.group.traverse(o=>{ if(o===hit) found=true; }); return found;
         });
         if (fish) fish.fade();
       }
     });
 
-    /* ===== Water bubbles (particles) ===== */
+    /* ===== Floating water bubbles ===== */
     const bubbleCount = 220;
     const bubbleGeo = new THREE.BufferGeometry();
     const bPos = new Float32Array(bubbleCount*3);
@@ -498,12 +570,12 @@
       const dt = Math.min((now - last)/1000, 0.05); last = now;
       const t  = now * 0.001;
 
-      // Horizontal camera pan for depth
+      // Smooth horizontal camera pan
       const targetX = mouseX * panRange;
       camera.position.x += (targetX - camera.position.x)*0.05;
       camera.lookAt(0,0,0);
 
-      // Fish
+      // Fish updates
       for(const f of FISH) f.update(dt, t);
 
       // Bubbles & shark
