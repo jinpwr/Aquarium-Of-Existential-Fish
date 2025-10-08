@@ -362,81 +362,60 @@
       return tex;
     }
 
-    /* === PROCEDURAL 2D SHARK SILHOUETTE (canvas -> texture) ============= */
+    /* === PROCEDURAL 2D SHARK SILHOUETTE (canvas → texture) — FIXED ====== */
     function makeSharkCanvas(size=1024){
       const c = document.createElement('canvas'); c.width = size; c.height = size*0.5;
       const ctx = c.getContext('2d');
       ctx.clearRect(0,0,c.width,c.height);
 
-      // helper to scale normalized coordinates
-      const W = c.width, H = c.height;
-      const X = v => v * W;
-      const Y = v => v * H;
-
+      const W=c.width,H=c.height, X=v=>v*W, Y=v=>v*H;
       ctx.save();
-      ctx.translate(X(0.5), Y(0.48)); // center-ish baseline
-      ctx.scale(W*0.0011, H*0.0011);  // scale normalized path
+      ctx.translate(X(0.5), Y(0.48));
+      ctx.scale(W*0.0011, H*0.0011);
 
-      // Build a silhouette path inspired by your reference (smooth bezier outline)
       const p = new Path2D();
-      // Start at tail root (left)
-      p.moveTo(-430,  10);
+      p.moveTo(-430,10);
+      p.bezierCurveTo(-520,10,-560,60,-590,120);
+      p.bezierCurveTo(-545,100,-500,70,-455,40);
+      p.bezierCurveTo(-300,15,-140,-10,10,-30);
+      p.bezierCurveTo(60,-80,110,-90,135,-15);       // dorsal fin
+      p.bezierCurveTo(240,-5,345,5,458,25);          // snout
+      p.bezierCurveTo(500,30,560,60,610,90);         // tip
+      p.bezierCurveTo(500,75,420,60,300,46);         // lower snout → belly
+      p.bezierCurveTo(120,30,60,55,80,110);          // pectoral area
+      p.bezierCurveTo(15,80,-50,65,-160,50);
+      p.bezierCurveTo(-280,40,-360,36,-430,10);      // back to tail root
+      // lower tail lobe
+      p.moveTo(-460,30);
+      p.bezierCurveTo(-520,80,-555,140,-590,200);
+      p.bezierCurveTo(-520,155,-480,120,-430,90);
+      // small pectoral bulge
+      p.moveTo(-60,60);
+      p.bezierCurveTo(-20,130,-10,150,50,140);
+      p.bezierCurveTo(10,120,0,100,-60,60);
 
-      // upper tail lobe
-      p.bezierCurveTo(-520,  10, -560,  60, -590, 120);
-      p.bezierCurveTo(-545, 100, -500,  70, -455,  40);
-
-      // dorsal ridge to dorsal fin
-      p.bezierCurveTo(-300,  15, -140, -10,  10, -30);
-      p.bezierCurveTo( 60, -80, 110, -90, 135, -15); // dorsal fin
-
-      // back to spine toward snout
-      p.bezierCurveTo( 240,  -5, 345,   5, 458,  25); // to snout
-      p.bezierCurveTo( 500,  30, 560,  60, 610,  90); // very front curve (pointed)
-
-      // lower snout to belly
-      p.bezierCurveTo( 500,  75, 420,  60, 300,  46);
-
-      // pelvic/pectoral region (lower fin)
-      p.bezierCurveTo( 120,  30,  60,  55,  80, 110);
-      p.bezierCurveTo(  15,  80, -50,  65, -160,  50);
-
-      // back to tail root (belly curve)
-      p.bezierCurveTo(-280,  40, -360,  36, -430,  10);
-
-      // lower tail lobe (separate small loop merged with main silhouette)
-      p.moveTo(-460,  30);
-      p.bezierCurveTo(-520,  80, -555, 140, -590, 200);
-      p.bezierCurveTo(-520, 155, -480, 120, -430,  90);
-
-      // pectoral fins (small bulges on lower edge)
-      p.moveTo(-60,  60);
-      p.bezierCurveTo(-20, 130, -10, 150, 50, 140);
-      p.bezierCurveTo( 10, 120,   0, 100, -60,  60);
-
-      // Fill silhouette
       ctx.fillStyle = '#0a0f17';
       ctx.shadowColor = '#0a0f17';
-      ctx.shadowBlur = 4; // softens edges a hair
+      ctx.shadowBlur = 4;
       ctx.fill(p, 'nonzero');
 
-      // Slight inner gradient to break the flatness (still looks like silhouette)
-      const g = ctx.createLinearGradient(-W, -H, W, H);
-      g.addColorStop(0.0, 'rgba(255,255,255,0.00)');
-      g.addColorStop(0.5, 'rgba(255,255,255,0.03)');
-      g.addColorStop(1.0, 'rgba(0,0,0,0.06)');
+      // subtle inner gradient so it isn't perfectly flat (still a silhouette)
+      const g = ctx.createLinearGradient(-W,-H, W,H);
+      g.addColorStop(0.0,'rgba(255,255,255,0.00)');
+      g.addColorStop(0.5,'rgba(255,255,255,0.03)');
+      g.addColorStop(1.0,'rgba(0,0,0,0.06)');
       ctx.shadowBlur = 0;
       ctx.globalCompositeOperation = 'source-atop';
       ctx.fillStyle = g;
-      ctx.fillRect(-W, -H, W*2, H*2);
+      ctx.fillRect(-W,-H,W*2,H*2);
 
       ctx.restore();
 
-      // Feather the alpha at the very edges so it melts into water
+      // slight alpha feather
       ctx.globalCompositeOperation = 'destination-in';
-      const fade = ctx.createLinearGradient(0, 0, 0, H);
-      fade.addColorStop(0.0, 'rgba(255,255,255,0.95)');
-      fade.addColorStop(1.0, 'rgba(255,255,255,0.85)');
+      const fade = ctx.createLinearGradient(0,0,0,H);
+      fade.addColorStop(0.0,'rgba(255,255,255,0.95)');
+      fade.addColorStop(1.0,'rgba(255,255,255,0.85)');
       ctx.fillStyle = fade; ctx.fillRect(0,0,W,H);
 
       return c;
@@ -448,12 +427,12 @@
       tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
       tex.needsUpdate = true;
 
-      // Plane with transparent texture (no depthWrite so it blends softly)
       const mat = new THREE.MeshBasicMaterial({
-        map: tex, transparent: true, opacity: 0.85, depthWrite: false
+        map: tex, transparent: true, opacity: 0.9,
+        depthWrite: false, side: THREE.DoubleSide // show even if “back-facing”
       });
       const aspect = canvas.width / canvas.height; // ~2:1
-      const W = 8.0; const H = W / aspect;        // large silhouette
+      const W = 9.5, H = W / aspect;               // big silhouette
       const mesh = new THREE.Mesh(new THREE.PlaneGeometry(W, H), mat);
       mesh.userData.texture = tex;
       return mesh;
@@ -463,43 +442,46 @@
       constructor(){
         this.mesh = makeSharkSprite();
         scene.add(this.mesh);
-        this.speed = 0.65;           // horizontal units/sec
+        this.speed = 0.55;          // slow, ominous
+        this.baseOpacity = 0.9;
         this.reset(true);
       }
       reset(first=false){
-        // Always behind everything: fish z ≈ [-2.5, 2.5], god-rays z ≈ [-6,-3]
-        this.z = rand(-10.0, -7.2);
-        this.y = rand(0.2, 1.6);
+        // Always behind fish & rays, but not swallowed by fog
+        this.z = -7.8;
+        this.y = rand(0.2, 1.2);
         this.dir = Math.random() < 0.5 ? -1 : 1;
 
-        const startX = this.dir > 0 ? -12.5 : 12.5;
+        const startX = first ? rand(-5,5) : (this.dir > 0 ? -12.5 : 12.5);
         this.mesh.position.set(startX, this.y, this.z);
-        // face direction of travel
-        this.mesh.rotation.y = (this.dir > 0 ? Math.PI : 0);
-        // depth-based opacity (farther = fainter)
-        const depthFade = THREE.MathUtils.mapLinear(Math.abs(this.z), 7.2, 10.0, 0.95, 0.6);
-        this.mesh.material.opacity = depthFade;
 
+        // Face camera (no horizontal flip needed)
+        this.mesh.rotation.y = 0;
+
+        this.mesh.material.opacity = this.baseOpacity;
         this.phase = Math.random() * Math.PI * 2;
-        if (first){ this.mesh.position.x += this.dir * rand(0, 6); }
       }
       update(dt, t){
         // strictly horizontal glide
-        this.mesh.position.x += this.dir * this.speed * dt;
-        // slight bob to feel watery
+        this.mesh.position.x += (this.dir > 0 ? 1 : -1) * this.speed * dt;
+        // subtle bob
         this.mesh.position.y = this.y + Math.sin(t * 0.25 + this.phase) * 0.12;
-        // tiny opacity breathing
-        const base = this.mesh.material.opacity;
-        this.mesh.material.opacity = THREE.MathUtils.clamp(base + Math.sin(t * 0.15 + this.phase) * 0.02, 0.55, 0.95);
 
-        // loop when offscreen
+        // gentle opacity breathing
+        this.mesh.material.opacity = THREE.MathUtils.clamp(
+          this.baseOpacity + Math.sin(t * 0.15 + this.phase) * 0.03, 0.6, 0.95
+        );
+
+        // loop
         if ((this.dir < 0 && this.mesh.position.x < -13.5) ||
             (this.dir > 0 && this.mesh.position.x > 13.5)){
+          this.dir = Math.random() < 0.5 ? -1 : 1;
           this.reset(false);
         }
       }
     }
 
+    /* === Create background shark === */
     const SHARK = new BackgroundShark2D();
 
     /* === Interaction === */
@@ -552,7 +534,7 @@
       for (const f of FISH) f.update(dt);
       updateBubbles(dt);
       updateGodRays(dt);
-      SHARK.update(dt, t);  // always behind (z ≤ -7.2)
+      SHARK.update(dt, t); // always behind, visible immediately
 
       renderer.render(scene, camera);
       requestAnimationFrame(tick);
