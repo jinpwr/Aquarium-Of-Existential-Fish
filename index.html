@@ -5,32 +5,34 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Aquarium of Existential Fish</title>
   <style>
-    /* ===== Background: fixed vertical gradient (light→dark), *blue→violet only*, slow dreamy shift ===== */
+    /* ===== Background: light (top) -> dark (bottom), slow dreamy hue shift within blues/pinks ===== */
     :root{
-      /* base stops chosen to live in blue/violet band (no pink) */
-      --top: #cfe9ff;   /* pale blue */
-      --mid: #86b6ff;   /* sky blue */
-      --bot: #23124a;   /* deep violet */
+      --top:   #c9e8ff;   /* light aqua */
+      --mid:   #8ac8ff;   /* sky blue */
+      --bot:   #1a0030;   /* deep violet */
     }
     html, body {
       height: 100%;
       margin: 0;
       overflow: hidden;
-      background: linear-gradient(to bottom, var(--top) 0%, var(--mid) 45%, var(--bot) 100%);
+      background:
+        linear-gradient(to bottom, var(--top) 0%, var(--mid) 45%, var(--bot) 100%);
       background-attachment: fixed;
-      /* Tiny hue wiggle to keep it alive without drifting into pink */
-      animation: hueCycleBlueViolet 100s ease-in-out infinite;
-      /* IMPORTANT: modest range so it never reaches magenta/pink */
-      filter: hue-rotate(0deg) saturate(112%) contrast(102%);
+      /* Constrain hue shift to vaporwave band (cool blues <-> pinks), slow & dreamy */
+      animation: hueCycleVaporwave 90s ease-in-out infinite;
+      filter: hue-rotate(0deg) saturate(110%);
     }
-    @keyframes hueCycleBlueViolet {
-      0%   { filter: hue-rotate(-6deg)  saturate(112%) contrast(102%); }
-      50%  { filter: hue-rotate(  6deg) saturate(115%) contrast(103%); }
-      100% { filter: hue-rotate(-6deg)  saturate(112%) contrast(102%); }
+    /* oscillates ~±30° to stay in blue/pink territory */
+    @keyframes hueCycleVaporwave {
+      0%   { filter: hue-rotate(-15deg) saturate(115%); }
+      50%  { filter: hue-rotate( 30deg) saturate(120%); }
+      100% { filter: hue-rotate(-15deg) saturate(115%); }
     }
 
+    /* Canvas stack */
     canvas { position: relative; z-index: 0; display: block; }
 
+    /* Pixel dither */
     #dither {
       position: fixed; inset: 0; pointer-events: none; opacity: .12; z-index: 1;
       background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" fill="black" opacity="0"/><rect x="0" y="0" width="2" height="2" fill="white" opacity="0.07"/><rect x="2" y="2" width="2" height="2" fill="white" opacity="0.07"/></svg>');
@@ -38,6 +40,7 @@
       mix-blend-mode: overlay;
     }
 
+    /* UI overlay */
     #overlay {
       position: fixed; inset: 0; pointer-events: none; z-index: 3;
       display: flex; align-items: flex-end; justify-content: space-between;
@@ -59,11 +62,10 @@
 
   <script type="module">
     import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
-    import { RoomEnvironment } from 'https://unpkg.com/three@0.160.0/examples/jsm/environments/RoomEnvironment.js';
 
     /* ===== Scene / Camera / Renderer ===== */
     const scene = new THREE.Scene();
-    scene.fog = new THREE.FogExp2(0x19103a, 0.05);
+    scene.fog = new THREE.FogExp2(0x120022, 0.05);
 
     const camera = new THREE.PerspectiveCamera(65, innerWidth/innerHeight, 0.1, 120);
     camera.position.set(0, 2.2, 7);
@@ -75,27 +77,21 @@
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.35;
-    renderer.physicallyCorrectLights = true; // better reflections
     document.body.appendChild(renderer.domElement);
 
-    /* ===== Environment map for metallic "jewel" fish reflections ===== */
-    const pmrem = new THREE.PMREMGenerator(renderer);
-    const envRT = pmrem.fromScene(new RoomEnvironment(renderer), 0.04);
-    const envMap = envRT.texture;
-    scene.environment = envMap;
-
-    /* ===== Lighting ===== */
+    /* ===== Lighting (unchanged vibe: dramatic, good 3D read) ===== */
     const hemi = new THREE.HemisphereLight(0xb9ecff, 0x180020, 0.48);
     scene.add(hemi);
-    const key  = new THREE.PointLight(0x64d8ff, 16, 80, 2.0);  key.position.set( 6,  4,  3); scene.add(key);
-    const fill = new THREE.PointLight(0x4dffc8,  8, 80, 2.0);  fill.position.set(-6, -1, -2); scene.add(fill);
-    const rim  = new THREE.PointLight(0xa96bff, 12, 100, 2.2); rim.position.set( 0,  3.5,-8); scene.add(rim);
+
+    const key = new THREE.PointLight(0x64d8ff, 16, 80, 2.0);  key.position.set(6, 4, 3);   scene.add(key);
+    const fill = new THREE.PointLight(0x4dffc8,  8, 80, 2.0); fill.position.set(-6, -1, -2); scene.add(fill);
+    const rim = new THREE.PointLight(0xff5ad1, 12, 100, 2.2); rim.position.set(0, 3.5, -8);  scene.add(rim);
 
     /* ===== Helpers ===== */
     const rand = (a,b)=> a + Math.random()*(b-a);
     const choose = arr => arr[(Math.random()*arr.length)|0];
 
-    /* ===== Speech bubbles (unchanged) ===== */
+    /* ===== Speech bubbles (same as before) ===== */
     const PHRASES = [
       'i am not real','click to remember','today i forgot myself','be kind to the void','do fish dream?',
       '404: meaning not found','blink slowly','pretend to be water','becoming … becoming','a small thought floats'
@@ -156,9 +152,8 @@
       for (const l of lines){ ctx.fillText(l, x, curY); curY += lineHeight; }
     }
 
-    /* ===== Materials ===== */
-    // Pastel material (as before)
-    function makePastelMaterial(h){
+    /* ===== Bright pastel fish (kept) ===== */
+    function makeBrightMaterial(h){
       const color = new THREE.Color().setHSL(h, 0.92, 0.66);
       return new THREE.MeshStandardMaterial({
         color,
@@ -166,37 +161,15 @@
         emissiveIntensity: 0.75,
         roughness: 0.42,
         metalness: 0.18,
-        flatShading: true,
-        envMapIntensity: 0.6
-      });
-    }
-
-    // NEW: Metallic “jewel” material — mirrored, glossy, with subtle clearcoat & iridescence
-    function makeJewelMaterial(h){
-      const color = new THREE.Color().setHSL(h, 0.8, 0.55);
-      return new THREE.MeshPhysicalMaterial({
-        color,
-        metalness: 1.0,
-        roughness: 0.05,
-        envMap: envMap,
-        envMapIntensity: 1.5,
-        clearcoat: 0.8,
-        clearcoatRoughness: 0.08,
-        iridescence: 0.25,
-        iridescenceIOR: 1.1,
-        sheen: 0.0,
-        reflectivity: 1.0,
         flatShading: true
       });
     }
-
-    /* ===== Fish geometry & assembly ===== */
-    function makeFishMesh(isJewel=false){
+    function makeFishMesh(){
       const g = new THREE.Group();
       const hue = Math.random();
-      const bodyMat   = isJewel ? makeJewelMaterial(hue) : makePastelMaterial(hue);
-      const accentMat = isJewel ? makeJewelMaterial((hue + 0.08) % 1) : makePastelMaterial((hue + 0.08) % 1);
-      const accentMat2= isJewel ? makeJewelMaterial((hue + 0.15) % 1) : makePastelMaterial((hue + 0.15) % 1);
+      const bodyMat = makeBrightMaterial(hue);
+      const accentMat = makeBrightMaterial((hue + 0.08) % 1);
+      const accentMat2 = makeBrightMaterial((hue + 0.15) % 1);
 
       const bodyGeo = new THREE.IcosahedronGeometry(rand(0.25,0.38), 0);
       bodyGeo.scale(rand(1.6,2.1), 1, 1);
@@ -216,7 +189,7 @@
       g.add(finL, finR);
 
       const eyeGeo = new THREE.SphereGeometry(0.04, 12, 12);
-      const eyeMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.1, metalness: 0.2, envMapIntensity: 1.0 });
+      const eyeMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.1, metalness: 0.2 });
       const eyeL = new THREE.Mesh(eyeGeo, eyeMat);
       const eyeR = new THREE.Mesh(eyeGeo, eyeMat);
       eyeL.position.set(0.4, 0.06, 0.12); eyeR.position.set(0.4, 0.06, -0.12);
@@ -224,11 +197,10 @@
 
       return g;
     }
-
     class Fish {
-      constructor(isJewel=false){
+      constructor(){
         this.group = new THREE.Group();
-        this.mesh = makeFishMesh(isJewel);
+        this.mesh = makeFishMesh();
         this.group.add(this.mesh);
         this.bubble = makeBubbleSprite(choose(PHRASES));
         this.bubble.position.set(0, 0.9, 0);
@@ -259,7 +231,6 @@
             const targetQuat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1,0,0), dir);
             this.group.quaternion.slerp(targetQuat, 0.08);
           }
-          // gentle fin flutter
           this.mesh.children.forEach((c)=>{ if(c.geometry && c.geometry.type === 'ConeGeometry'){ c.rotation.y += 0.04; }});
         }
         this.bubble.lookAt(camera.position);
@@ -282,20 +253,15 @@
       setBubblesVisible(v){ this.bubble.visible = v; this.bubbleVisible = v; }
     }
 
-    /* ===== School: mix of pastel & jewel fish ===== */
+    /* ===== Fish school ===== */
     const FISH = [];
-    const COUNT = 18;
-    const JEWEL_RATIO = 0.35; // ~35% jewel fish
-    for (let i=0; i<COUNT; i++){
-      const isJewel = Math.random() < JEWEL_RATIO;
-      FISH.push(new Fish(isJewel));
-    }
+    for (let i=0; i<18; i++) FISH.push(new Fish());
     setInterval(()=>{
       const f = choose(FISH.filter(f=>!f.dead));
       if (f) f.randomThought();
     }, 1800);
 
-    /* ===== Floating water bubbles (bottom→top) ===== */
+    /* ===== NEW: Floating water bubbles (bottom -> top, gentle drift) ===== */
     const bubbleCount = 220;
     const bubbleGeo = new THREE.BufferGeometry();
     const positions = new Float32Array(bubbleCount * 3);
@@ -305,10 +271,12 @@
       positions[i*3+0] = rand(-6, 6);
       positions[i*3+1] = rand(-3, 3);
       positions[i*3+2] = rand(-4, 4);
-      speeds[i] = rand(0.12, 0.45);
-      xDrifts[i] = rand(-0.15, 0.15);
+      speeds[i] = rand(0.12, 0.45);       // upward speed
+      xDrifts[i] = rand(-0.15, 0.15);     // sideways drift
     }
     bubbleGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+    // soft, additive circles
     const bubbleMat = new THREE.PointsMaterial({
       color: new THREE.Color(0xdff9ff),
       size: 0.06,
@@ -319,6 +287,7 @@
       blending: THREE.AdditiveBlending
     });
     const bubbles = new THREE.Points(bubbleGeo, bubbleMat);
+    bubbles.position.y = 0;
     scene.add(bubbles);
 
     function updateBubbles(dt){
@@ -327,35 +296,51 @@
         let x = arr[i*3+0];
         let y = arr[i*3+1];
         let z = arr[i*3+2];
-        y += speeds[i] * dt;
-        x += xDrifts[i] * dt * 0.4;
+
+        y += speeds[i] * dt;              // rise
+        x += xDrifts[i] * dt * 0.4;       // slight sway
+
+        // recycle near the top
         if (y > 3.2){
-          y = -3.2; x = rand(-6,6); z = rand(-4,4);
-          speeds[i] = rand(0.12, 0.45); xDrifts[i] = rand(-0.15, 0.15);
+          y = -3.2;
+          x = rand(-6,6);
+          z = rand(-4,4);
+          speeds[i] = rand(0.12, 0.45);
+          xDrifts[i] = rand(-0.15, 0.15);
         }
+
         arr[i*3+0] = x; arr[i*3+1] = y; arr[i*3+2] = z;
       }
       bubbleGeo.attributes.position.needsUpdate = true;
     }
 
-    /* ===== Soft god-rays (as before) ===== */
-    const godRayTex = makeGodRayTexture();
+    /* ===== NEW: Soft god-rays (fake volumetric light shafts) =====
+       We create translucent gradient planes with additive blending,
+       placed behind the fish and gently swaying. */
+    const godRayTex = makeGodRayTexture(); // canvas-generated gradient
     const godRayMat = new THREE.MeshBasicMaterial({
-      map: godRayTex, transparent: true, opacity: 0.17,
-      blending: THREE.AdditiveBlending, depthWrite: false
+      map: godRayTex,
+      transparent: true,
+      opacity: 0.17,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
     });
-    const godRays = new THREE.Group(); scene.add(godRays);
+    const godRays = new THREE.Group();
+    scene.add(godRays);
+
     const rayPlanes = [];
     for (let i=0; i<5; i++){
       const w = rand(4, 7), h = rand(6, 10);
-      const plane = new THREE.Mesh(new THREE.PlaneGeometry(w, h), godRayMat.clone());
-      plane.position.set(rand(-3.5, 3.5), rand(-0.5, 2.5), rand(-6, -3));
+      const plane = new THREE.Mesh(new THREE.PlaneGeometry(w, h, 1, 1), godRayMat.clone());
+      plane.position.set(rand(-3.5, 3.5), rand(-0.5, 2.5), rand(-6, -3)); // behind fish
       plane.rotation.set(rand(-0.2, 0.2), rand(-0.2, 0.2), rand(-0.6, 0.6));
       plane.material.opacity = rand(0.10, 0.20);
       godRays.add(plane);
       rayPlanes.push({ mesh: plane, phase: Math.random()*Math.PI*2, speed: rand(0.15, 0.35) });
     }
-    function updateGodRays(dt){
+
+    function updateGodRays(dt, t){
+      // gentle breathing/sway + small opacity pulse
       for (const r of rayPlanes){
         r.phase += r.speed * dt * 0.35;
         const m = r.mesh;
@@ -365,17 +350,23 @@
         m.material.opacity = base + 0.06 * (0.5 + 0.5 * Math.sin(r.phase * 0.9));
       }
     }
+
     function makeGodRayTexture(){
       const w = 512, h = 1024;
       const c = document.createElement('canvas'); c.width = w; c.height = h;
       const ctx = c.getContext('2d');
+
+      // radial-ish vertical gradient: bright core, feathered edges
       const grad = ctx.createLinearGradient(w*0.5, 0, w*0.5, h);
       grad.addColorStop(0.00, 'rgba(255,255,255,0.00)');
       grad.addColorStop(0.10, 'rgba(255,255,255,0.10)');
       grad.addColorStop(0.50, 'rgba(255,255,255,0.25)');
       grad.addColorStop(0.90, 'rgba(255,255,255,0.08)');
       grad.addColorStop(1.00, 'rgba(255,255,255,0.00)');
-      ctx.fillStyle = grad; ctx.fillRect(0,0,w,h);
+      ctx.fillStyle = grad;
+      ctx.fillRect(0,0,w,h);
+
+      // feather left/right to make a shaft
       const edge = ctx.createLinearGradient(0, 0, w, 0);
       edge.addColorStop(0.00, 'rgba(255,255,255,0.00)');
       edge.addColorStop(0.25, 'rgba(255,255,255,0.10)');
@@ -383,7 +374,9 @@
       edge.addColorStop(0.75, 'rgba(255,255,255,0.10)');
       edge.addColorStop(1.00, 'rgba(255,255,255,0.00)');
       ctx.globalCompositeOperation = 'lighter';
-      ctx.fillStyle = edge; ctx.fillRect(0,0,w,h);
+      ctx.fillStyle = edge;
+      ctx.fillRect(0,0,w,h);
+
       const tex = new THREE.CanvasTexture(c);
       tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
       tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
@@ -393,7 +386,7 @@
     /* ===== Interaction ===== */
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
-    addEventListener('click', (e)=>{
+    function onClick(e){
       mouse.x = (e.clientX / innerWidth) * 2 - 1;
       mouse.y = -(e.clientY / innerHeight) * 2 + 1;
       raycaster.setFromCamera(mouse, camera);
@@ -404,7 +397,9 @@
       if (!fish || fish.dead) return;
       if (!fish.frozen){ fish.toggleFreeze(); updateBubbleText(fish.bubble, 'i will remember this'); }
       else { fish.vanish(); }
-    });
+    }
+    addEventListener('click', onClick);
+
     addEventListener('keydown', (e)=>{
       if (e.key.toLowerCase() === 'h'){
         const anyVisible = FISH.some(f=>f.bubbleVisible);
@@ -429,6 +424,7 @@
     let last = performance.now();
     function tick(now){
       const dt = Math.min((now-last)/1000, 0.05); last = now;
+      const t = now * 0.001;
 
       camera.position.x += (targetOffset.x - camera.position.x) * 0.04;
       camera.position.y += (2.2 + targetOffset.y - camera.position.y) * 0.04;
@@ -436,7 +432,7 @@
 
       for (const f of FISH) f.update(dt);
       updateBubbles(dt);
-      updateGodRays(dt);
+      updateGodRays(dt, t);
 
       renderer.render(scene, camera);
       requestAnimationFrame(tick);
