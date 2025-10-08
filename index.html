@@ -23,19 +23,11 @@
     /* Canvas layer */
     canvas { position: relative; z-index: 0; display: block; }
 
-    /* Pixel-dither overlay */
+    /* Subtle film grain (kept; not a shimmer effect) */
     #dither {
       position: fixed; inset: 0; pointer-events: none; opacity: .12; z-index: 1;
       background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" fill="black" opacity="0"/><rect x="0" y="0" width="2" height="2" fill="white" opacity="0.07"/><rect x="2" y="2" width="2" height="2" fill="white" opacity="0.07"/></svg>');
       image-rendering: pixelated; background-size: 4px; background-repeat: repeat; mix-blend-mode: overlay;
-    }
-
-    /* Caustics overlay at the top */
-    #caustics {
-      position: fixed; left: 0; top: 0; right: 0; height: 45vh;
-      z-index: 2; pointer-events: none; opacity: 0.22; mix-blend-mode: screen;
-      -webkit-mask-image: linear-gradient(to bottom, rgba(255,255,255,1), rgba(255,255,255,0));
-      mask-image: linear-gradient(to bottom, rgba(255,255,255,1), rgba(255,255,255,0));
     }
 
     /* Overlay UI text */
@@ -54,31 +46,7 @@
 <body>
   <div id="dither"></div>
 
-  <!-- Water caustics (SVG filter) -->
-  <svg id="caustics" viewBox="0 0 100 100" preserveAspectRatio="none">
-    <defs>
-      <filter id="causticsFilter">
-        <feTurbulence type="fractalNoise" baseFrequency="0.008 0.02" numOctaves="3" seed="3" stitchTiles="stitch" result="noise">
-          <animate attributeName="baseFrequency" dur="14s" values="0.008 0.02; 0.012 0.025; 0.008 0.02" repeatCount="indefinite"/>
-          <animate attributeName="seed" dur="20s" values="3;5;7;3" repeatCount="indefinite"/>
-        </feTurbulence>
-        <feDisplacementMap in="SourceGraphic" in2="noise" scale="35" xChannelSelector="R" yChannelSelector="G"/>
-        <feColorMatrix type="matrix" values="
-          2 0 0 0 0
-          0 2 0 0 0
-          0 0 2 0 0
-          0 0 0 1 -0.7" />
-        <feGaussianBlur stdDeviation="0.4"/>
-      </filter>
-
-      <linearGradient id="causticsFill" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%"  stop-color="#d9f0ff"/>
-        <stop offset="60%" stop-color="#7aa0ff"/>
-        <stop offset="100%" stop-color="#3b2b7c"/>
-      </linearGradient>
-    </defs>
-    <rect x="0" y="0" width="100" height="100" fill="url(#causticsFill)" filter="url(#causticsFilter)"/>
-  </svg>
+  <!-- (Removed) Caustics shimmer SVG -->
 
   <div id="overlay">
     <div class="hint">Move mouse: parallax · Click fish: freeze/vanish · <kbd>H</kbd>: hide bubbles</div>
@@ -104,7 +72,7 @@
     renderer.toneMappingExposure = 1.35;
     document.body.appendChild(renderer.domElement);
 
-    /* === Lighting === */
+    /* === Lighting (kept simple; no god-rays) === */
     const hemi = new THREE.HemisphereLight(0xb9ecff, 0x180020, 0.48);
     scene.add(hemi);
     const key  = new THREE.PointLight(0x64d8ff, 16, 80, 2.0); key.position.set(6,4,3);   scene.add(key);
@@ -310,63 +278,10 @@
       bubbleGeo.attributes.position.needsUpdate = true;
     }
 
-    /* === Soft god-rays (additive gradient planes) === */
-    const godRayTex = makeGodRayTexture();
-    const godRayMat = new THREE.MeshBasicMaterial({
-      map: godRayTex, transparent: true, opacity: 0.17,
-      blending: THREE.AdditiveBlending, depthWrite: false
-    });
-    const godRays = new THREE.Group(); scene.add(godRays);
-    const rayPlanes = [];
-    for (let i=0; i<5; i++){
-      const w = rand(4, 7), h = rand(6, 10);
-      const plane = new THREE.Mesh(new THREE.PlaneGeometry(w, h), godRayMat.clone());
-      plane.position.set(rand(-3.5, 3.5), rand(-0.5, 2.5), rand(-6, -3)); // behind fish
-      plane.rotation.set(rand(-0.2, 0.2), rand(-0.2, 0.2), rand(-0.6, 0.6));
-      plane.material.opacity = rand(0.10, 0.20);
-      godRays.add(plane);
-      rayPlanes.push({ mesh: plane, phase: Math.random()*Math.PI*2, speed: rand(0.15, 0.35) });
-    }
-    function updateGodRays(dt){
-      for (const r of rayPlanes){
-        r.phase += r.speed * dt * 0.35;
-        const m = r.mesh;
-        m.rotation.z += Math.sin(r.phase) * 0.0008;
-        m.rotation.x += Math.cos(r.phase * 0.7) * 0.0006;
-        const base = 0.12;
-        m.material.opacity = base + 0.06 * (0.5 + 0.5 * Math.sin(r.phase * 0.9));
-      }
-    }
-    function makeGodRayTexture(){
-      const w = 512, h = 1024;
-      const c = document.createElement('canvas'); c.width = w; c.height = h;
-      const ctx = c.getContext('2d');
-      const grad = ctx.createLinearGradient(w*0.5, 0, w*0.5, h);
-      grad.addColorStop(0.00, 'rgba(255,255,255,0.00)');
-      grad.addColorStop(0.10, 'rgba(255,255,255,0.10)');
-      grad.addColorStop(0.50, 'rgba(255,255,255,0.25)');
-      grad.addColorStop(0.90, 'rgba(255,255,255,0.08)');
-      grad.addColorStop(1.00, 'rgba(255,255,255,0.00)');
-      ctx.fillStyle = grad; ctx.fillRect(0,0,w,h);
-      const edge = ctx.createLinearGradient(0, 0, w, 0);
-      edge.addColorStop(0.00, 'rgba(255,255,255,0.00)');
-      edge.addColorStop(0.25, 'rgba(255,255,255,0.10)');
-      edge.addColorStop(0.50, 'rgba(255,255,255,0.25)');
-      edge.addColorStop(0.75, 'rgba(255,255,255,0.10)');
-      edge.addColorStop(1.00, 'rgba(255,255,255,0.00)');
-      ctx.globalCompositeOperation = 'lighter';
-      ctx.fillStyle = edge; ctx.fillRect(0,0,w,h);
-      const tex = new THREE.CanvasTexture(c);
-      tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
-      tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-      return tex;
-    }
-
     /* === PNG SHARK (sprite plane that moves horizontally) =============== */
-    const SHARK_SRC = 'shark.png'; // <- put shark.png next to this HTML (or change path)
+    const SHARK_SRC = 'shark.png'; // put shark.png next to this HTML (or change path)
 
     function fallbackSilhouetteCanvas() {
-      // simple backup silhouette in case PNG fails to load
       const c = document.createElement('canvas'); c.width = 1024; c.height = 512;
       const ctx = c.getContext('2d');
       ctx.fillStyle = '#0a0f17';
@@ -383,7 +298,17 @@
       const loader = new THREE.TextureLoader();
       loader.load(
         SHARK_SRC,
-        tex => { tex.anisotropy = renderer.capabilities.getMaxAnisotropy(); onReady(tex, null); },
+        (tex) => {
+          // --- HALO/FRINGE FIXES ---
+          tex.colorSpace = THREE.SRGBColorSpace;
+          tex.premultiplyAlpha = true;
+          tex.generateMipmaps = false;
+          tex.minFilter = THREE.LinearFilter;
+          tex.magFilter = THREE.LinearFilter;
+          tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+          tex.needsUpdate = true;
+          onReady(tex, null);
+        },
         undefined,
         () => { // error -> fallback
           const canvas = fallbackSilhouetteCanvas();
@@ -401,12 +326,16 @@
         this.baseOpacity = 0.9; // overall darkness
         loadSharkTexture((texture, meta)=>{
           const mat = new THREE.MeshBasicMaterial({
-            map: texture, transparent: true, opacity: this.baseOpacity,
-            depthWrite: false, side: THREE.DoubleSide
+            map: texture,
+            transparent: true,
+            opacity: this.baseOpacity,
+            depthWrite: false,
+            side: THREE.DoubleSide,
+            alphaTest: 0.03 // discard edge pixels causing gray boxes
           });
 
-          const aspect = meta?.aspect || (texture.image.width / texture.image.height);
-          const W = 9.5;               // visual size (world units)
+          const aspect = meta?.aspect || (texture.image.width / texture.image.height || 2.0);
+          const W = 9.5;               // size in world units
           const H = W / aspect;
           const geo = new THREE.PlaneGeometry(W, H);
 
@@ -417,7 +346,7 @@
       }
       reset(first=false){
         if (!this.mesh) return; // wait until loaded
-        // Always behind fish & rays, but not swallowed by fog
+        // Always behind fish & away from heavy fog
         this.z = -7.8;
         this.y = rand(0.2, 1.2);
         this.dir = Math.random() < 0.5 ? -1 : 1;
@@ -425,7 +354,7 @@
         const startX = first ? rand(-5,5) : (this.dir > 0 ? -12.5 : 12.5);
         this.mesh.position.set(startX, this.y, this.z);
 
-        // Face camera; the PNG already points right in its pixels
+        // Face camera (no flipping needed)
         this.mesh.rotation.y = 0;
 
         this.mesh.material.opacity = this.baseOpacity;
@@ -433,10 +362,12 @@
       }
       update(dt, t){
         if (!this.mesh) return;
-        this.mesh.position.x += (this.dir > 0 ? 1 : -1) * this.speed * dt;  // strictly horizontal
-        this.mesh.position.y = this.y + Math.sin(t * 0.25 + this.phase) * 0.12; // tiny bob
+        // strictly horizontal glide
+        this.mesh.position.x += (this.dir > 0 ? 1 : -1) * this.speed * dt;
+        // gentle bob
+        this.mesh.position.y = this.y + Math.sin(t * 0.25 + this.phase) * 0.12;
 
-        // gentle opacity breathing
+        // subtle opacity breathing
         this.mesh.material.opacity = THREE.MathUtils.clamp(
           this.baseOpacity + Math.sin(t * 0.15 + this.phase) * 0.03, 0.6, 0.95
         );
@@ -501,7 +432,6 @@
 
       for (const f of FISH) f.update(dt);
       updateBubbles(dt);
-      updateGodRays(dt);
       SHARK.update(dt, t); // behind fish, horizontal pass
 
       renderer.render(scene, camera);
