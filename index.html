@@ -1,20 +1,101 @@
 <!DOCTYPE html>
 <html lang="en">
-<head><meta charset="UTF-8"><title>Render Test</title></head>
-<body style="margin:0;overflow:hidden;background:linear-gradient(to bottom,#bdf,#47f,#002);">
+<head>
+  <meta charset="UTF-8">
+  <title>Aquarium Test</title>
+  <style>
+    html,body{margin:0;height:100%;overflow:hidden;}
+    body{background:linear-gradient(to bottom,#caecff 0%,#7aa0ff 40%,#180046 100%);
+         animation:bgBluePulse 90s ease-in-out infinite;}
+    @keyframes bgBluePulse{
+      0%{background:linear-gradient(to bottom,#caecff 0%,#7aa0ff 40%,#180046 100%);}
+      50%{background:linear-gradient(to bottom,#bcd9ff 0%,#6b8cff 40%,#1a0a4a 100%);}
+      100%{background:linear-gradient(to bottom,#caecff 0%,#7aa0ff 40%,#180046 100%);}
+    }
+  </style>
+</head>
+<body>
 <script type="module">
 import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+console.log("Aquarium script running...");
+
 const scene=new THREE.Scene();
-const camera=new THREE.PerspectiveCamera(60,innerWidth/innerHeight,0.1,100);
+scene.fog=new THREE.FogExp2(0x120022,0.05);
+
+const camera=new THREE.PerspectiveCamera(65,innerWidth/innerHeight,0.1,200);
+camera.position.set(0,2.2,7);
+
 const renderer=new THREE.WebGLRenderer({antialias:true});
 renderer.setSize(innerWidth,innerHeight);
+renderer.outputColorSpace=THREE.SRGBColorSpace;
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure=1.35;
 document.body.appendChild(renderer.domElement);
-const cube=new THREE.Mesh(new THREE.BoxGeometry(),new THREE.MeshStandardMaterial({color:0x66ccff}));
-scene.add(cube);
-scene.add(new THREE.DirectionalLight(0xffffff,1));
-camera.position.z=3;
-function animate(){cube.rotation.x+=0.01;cube.rotation.y+=0.02;renderer.render(scene,camera);requestAnimationFrame(animate);}
-animate();
+
+scene.add(new THREE.HemisphereLight(0xb9ecff,0x180020,0.5));
+const key=new THREE.PointLight(0x64d8ff,16,80,2.0); key.position.set(6,4,3); scene.add(key);
+
+function rand(a,b){return a+Math.random()*(b-a);}
+function choose(a){return a[(Math.random()*a.length)|0];}
+
+const COLORS=[0xffd84d,0xff4d57,0xff8adf,0x72c7ff,0x4dffb3];
+class Fish{
+  constructor(){
+    const geo=new THREE.SphereGeometry(0.25,16,16);
+    const mat=new THREE.MeshStandardMaterial({color:choose(COLORS),emissive:0x111111,metalness:0.2,roughness:0.5});
+    this.mesh=new THREE.Mesh(geo,mat);
+    this.mesh.position.set(rand(-4,4),rand(-1.2,2.2),rand(-2.5,2.5));
+    scene.add(this.mesh);
+    this.vel=new THREE.Vector3(rand(-0.02,0.02),rand(-0.01,0.01),rand(-0.015,0.015));
+    this.turn=new THREE.Vector3(rand(-0.001,0.001),rand(-0.001,0.001),rand(-0.001,0.001));
+    this.speed=rand(0.003,0.018);
+  }
+  update(dt){
+    this.vel.x+=this.turn.x*dt; this.vel.y+=this.turn.y*dt; this.vel.z+=this.turn.z*dt;
+    this.vel.clampLength(0,this.speed);
+    this.mesh.position.addScaledVector(this.vel,dt*60);
+    const p=this.mesh.position;
+    if(p.x<-6||p.x>6)this.vel.x*=-1;
+    if(p.y<-3||p.y>3)this.vel.y*=-1;
+    if(p.z<-4||p.z>4)this.vel.z*=-1;
+  }
+}
+const FISH=[]; for(let i=0;i<14;i++)FISH.push(new Fish());
+
+// floating bubbles
+const bubbleCount=200;
+const bubbleGeo=new THREE.BufferGeometry();
+const pos=new Float32Array(bubbleCount*3);
+for(let i=0;i<bubbleCount;i++){pos[i*3]=rand(-6,6);pos[i*3+1]=rand(-3,3);pos[i*3+2]=rand(-4,4);}
+bubbleGeo.setAttribute('position',new THREE.BufferAttribute(pos,3));
+const bubbleMat=new THREE.PointsMaterial({color:0xdff9ff,size:0.06,transparent:true,opacity:0.7,depthWrite:false});
+const bubbles=new THREE.Points(bubbleGeo,bubbleMat);scene.add(bubbles);
+
+// shark plane
+new THREE.TextureLoader().load('shark.png',t=>{
+  const aspect=t.image.width/t.image.height;
+  const W=18,H=W/aspect;
+  const mat=new THREE.MeshBasicMaterial({map:t,transparent:true,opacity:0.75,depthWrite:false});
+  const shark=new THREE.Mesh(new THREE.PlaneGeometry(W,H),mat);
+  shark.position.set(-15,0.5,-7.8);
+  scene.add(shark);
+  let dir=1;
+  function moveShark(dt){
+    shark.position.x+=dir*0.5*dt;
+    if(dir>0 && shark.position.x>15){dir=-1;shark.rotation.y=Math.PI;}
+    else if(dir<0 && shark.position.x<-15){dir=1;shark.rotation.y=0;}
+  }
+  animate.moveShark=moveShark;
+});
+
+function animate(now){
+  const dt=0.016;
+  FISH.forEach(f=>f.update(dt));
+  if(animate.moveShark)animate.moveShark(dt);
+  renderer.render(scene,camera);
+  requestAnimationFrame(animate);
+}
+requestAnimationFrame(animate);
 </script>
 </body>
 </html>
