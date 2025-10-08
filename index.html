@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Aquarium of Existential Fish</title>
   <style>
-    /* Background: blue → blue-violet (no pink), slow dreamy shift */
     html, body {
       height: 100%;
       margin: 0;
@@ -22,14 +21,13 @@
 
     canvas { position: relative; z-index: 0; display: block; }
 
-    /* Subtle film grain (not a shimmer effect) */
     #dither {
       position: fixed; inset: 0; pointer-events: none; opacity: .12; z-index: 1;
       background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" fill="black" opacity="0"/><rect x="0" y="0" width="2" height="2" fill="white" opacity="0.07"/><rect x="2" y="2" width="2" height="2" fill="white" opacity="0.07"/></svg>');
-      image-rendering: pixelated; background-size: 4px; background-repeat: repeat; mix-blend-mode: overlay;
+      image-rendering: pixelated; background-size: 4px; background-repeat: repeat;
+      mix-blend-mode: overlay;
     }
 
-    /* Overlay UI text */
     #overlay {
       position: fixed; inset: 0; pointer-events: none; z-index: 3;
       display: flex; align-items: flex-end; justify-content: space-between;
@@ -54,7 +52,7 @@
 
     /* === Scene setup === */
     const scene = new THREE.Scene();
-    scene.fog = new THREE.FogExp2(0x120022, 0.05);
+    scene.fog = new THREE.FogExp2(0x120022, 0.12); // stronger fog for hazy shark
 
     const camera = new THREE.PerspectiveCamera(65, innerWidth/innerHeight, 0.1, 200);
     camera.position.set(0, 2.2, 7);
@@ -68,17 +66,17 @@
     renderer.toneMappingExposure = 1.35;
     document.body.appendChild(renderer.domElement);
 
-    /* === Lighting (simple, dramatic but no god-rays) === */
+    /* === Lighting === */
     const hemi = new THREE.HemisphereLight(0xb9ecff, 0x180020, 0.48);
     scene.add(hemi);
-    const key  = new THREE.PointLight(0x64d8ff, 16, 80, 2.0); key.position.set(6,4,3);   scene.add(key);
-    const fill = new THREE.PointLight(0x4dffc8,  8, 80, 2.0); fill.position.set(-6,-1,-2); scene.add(fill);
-    const rim  = new THREE.PointLight(0x5d5aff, 12,100, 2.2); rim.position.set(0,3.5,-8);  scene.add(rim);
+    const key  = new THREE.PointLight(0x64d8ff, 16, 80, 2.0); key.position.set(6,4,3); scene.add(key);
+    const fill = new THREE.PointLight(0x4dffc8, 8, 80, 2.0); fill.position.set(-6,-1,-2); scene.add(fill);
+    const rim  = new THREE.PointLight(0x5d5aff, 12, 100, 2.2); rim.position.set(0,3.5,-8); scene.add(rim);
 
     const rand = (a,b)=> a + Math.random()*(b-a);
     const choose = arr => arr[(Math.random()*arr.length)|0];
 
-    /* === Thought bubbles (sprite canvas) === */
+    /* === Thought bubbles === */
     const PHRASES = [
       'i am not real','click to remember','today i forgot myself','be kind to the void','do fish dream?',
       '404: meaning not found','blink slowly','pretend to be water','becoming … becoming','a small thought floats'
@@ -109,7 +107,8 @@
       ctx.strokeStyle = 'rgba(220,255,250,0.75)'; ctx.lineWidth = 2;
       roundRect(ctx, 8, 8, w-16, h-16, 14, true, true);
       ctx.font = '600 22px ui-monospace, monospace';
-      ctx.fillStyle = 'rgba(235,255,250,0.98)'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = 'rgba(235,255,250,0.98)';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       wrapText(ctx, text, w/2, h/2, w-36, 28);
       tex.needsUpdate = true;
     }
@@ -139,7 +138,7 @@
       for (const l of lines){ ctx.fillText(l, x, curY); curY += lineHeight; }
     }
 
-    /* === Bright pastel fish === */
+    /* === Fish === */
     function makeBrightMaterial(h){
       const color = new THREE.Color().setHSL(h, 0.92, 0.66);
       return new THREE.MeshStandardMaterial({
@@ -163,7 +162,8 @@
       const body = new THREE.Mesh(bodyGeo, bodyMat); g.add(body);
 
       const tailGeo = new THREE.ConeGeometry(0.2, 0.35, 3);
-      tailGeo.rotateZ(Math.PI/2); tailGeo.translate(-bodyGeo.parameters.radius*1.1, 0, 0);
+      tailGeo.rotateZ(Math.PI/2);
+      tailGeo.translate(-bodyGeo.parameters.radius*1.1, 0, 0);
       const tail = new THREE.Mesh(tailGeo, accentMat); g.add(tail);
 
       const finGeo = new THREE.ConeGeometry(0.08, 0.18, 3);
@@ -179,7 +179,6 @@
       const eyeR = new THREE.Mesh(eyeGeo, eyeMat);
       eyeL.position.set(0.4, 0.06, 0.12); eyeR.position.set(0.4, 0.06, -0.12);
       g.add(eyeL, eyeR);
-
       return g;
     }
 
@@ -191,7 +190,6 @@
         this.bubble = makeBubbleSprite(choose(PHRASES));
         this.bubble.position.set(0, 0.9, 0);
         this.group.add(this.bubble);
-
         this.group.position.set(rand(-4,4), rand(-1.2,2.2), rand(-2.5,2.5));
         this.vel = new THREE.Vector3(rand(-0.02,0.02), rand(-0.01,0.01), rand(-0.015,0.015));
         this.turn = new THREE.Vector3(rand(-0.001,0.001), rand(-0.001,0.001), rand(-0.001,0.001));
@@ -209,13 +207,11 @@
           if (p.x < -6 || p.x > 6) this.vel.x *= -1;
           if (p.y < -3 || p.y > 3) this.vel.y *= -1;
           if (p.z < -4 || p.z > 4) this.vel.z *= -1;
-
           const dir = this.vel.clone().normalize();
           if (dir.lengthSq() > 0.0001){
             const targetQuat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1,0,0), dir);
             this.group.quaternion.slerp(targetQuat, 0.08);
           }
-          // fin wiggle
           this.mesh.children.forEach((c)=>{ if(c.geometry && c.geometry.type === 'ConeGeometry'){ c.rotation.y += 0.04; }});
         }
         this.bubble.lookAt(camera.position);
@@ -238,46 +234,11 @@
       setBubblesVisible(v){ this.bubble.visible = v; this.bubbleVisible = v; }
     }
 
-    /* === Fish + phrases === */
     const FISH = []; for (let i=0; i<18; i++) FISH.push(new Fish());
     setInterval(()=>{ const f = choose(FISH.filter(f=>!f.dead)); if (f) f.randomThought(); }, 1800);
 
-    /* === Floating water bubbles (bottom→top) === */
-    const bubbleCount = 220;
-    const bubbleGeo = new THREE.BufferGeometry();
-    const positions = new Float32Array(bubbleCount * 3);
-    const speeds = new Float32Array(bubbleCount);
-    const xDrifts = new Float32Array(bubbleCount);
-    for (let i=0; i<bubbleCount; i++){
-      positions[i*3+0] = rand(-6, 6);
-      positions[i*3+1] = rand(-3, 3);
-      positions[i*3+2] = rand(-4, 4);
-      speeds[i] = rand(0.12, 0.45);
-      xDrifts[i] = rand(-0.15, 0.15);
-    }
-    bubbleGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    const bubbleMat = new THREE.PointsMaterial({
-      color: new THREE.Color(0xdff9ff),
-      size: 0.06, sizeAttenuation: true, transparent: true, opacity: 0.7,
-      depthWrite: false, blending: THREE.AdditiveBlending
-    });
-    const bubbles = new THREE.Points(bubbleGeo, bubbleMat);
-    scene.add(bubbles);
-
-    function updateBubbles(dt){
-      const arr = bubbleGeo.attributes.position.array;
-      for (let i=0; i<bubbleCount; i++){
-        let x = arr[i*3+0], y = arr[i*3+1], z = arr[i*3+2];
-        y += speeds[i] * dt; x += xDrifts[i] * dt * 0.4;
-        if (y > 3.2){ y = -3.2; x = rand(-6,6); z = rand(-4,4);
-          speeds[i] = rand(0.12, 0.45); xDrifts[i] = rand(-0.15, 0.15); }
-        arr[i*3+0] = x; arr[i*3+1] = y; arr[i*3+2] = z;
-      }
-      bubbleGeo.attributes.position.needsUpdate = true;
-    }
-
-    /* === PNG SHARK: left→right, exit, flip, right→left (loop) === */
-    const SHARK_SRC = 'shark.png'; // put shark.png next to this HTML
+    /* === Background Shark (2× size, gray, foggy; left↔right loop) === */
+    const SHARK_SRC = 'shark.png';
 
     function fallbackSilhouetteCanvas() {
       const c = document.createElement('canvas'); c.width = 1024; c.height = 512;
@@ -297,7 +258,6 @@
       loader.load(
         SHARK_SRC,
         (tex) => {
-          // Edge/halo fixes
           tex.colorSpace = THREE.SRGBColorSpace;
           tex.premultiplyAlpha = true;
           tex.generateMipmaps = false;
@@ -308,7 +268,7 @@
           onReady(tex, null);
         },
         undefined,
-        () => { // fallback silhouette if PNG missing
+        () => {
           const canvas = fallbackSilhouetteCanvas();
           const tex = new THREE.CanvasTexture(canvas);
           tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
@@ -320,52 +280,55 @@
     class BackgroundSharkPNG {
       constructor(){
         this.mesh = null;
-        this.speed = 0.55;      // slow, ominous
+        this.speed = 0.55;
         this.baseOpacity = 0.9;
-        this.dir = 1;           // start left → right
+        this.dir = 1; // start left → right
         this.phase = Math.random() * Math.PI * 2;
         this.y = rand(0.2, 1.2);
-        this.z = -7.8;          // behind fish, not swallowed by fog
+        this.z = -7.8;
         loadSharkTexture((texture, meta)=>{
           const mat = new THREE.MeshBasicMaterial({
-            map: texture, transparent: true, opacity: this.baseOpacity,
-            depthWrite: false, side: THREE.DoubleSide, alphaTest: 0.03
+            map: texture,
+            transparent: true,
+            opacity: this.baseOpacity,
+            depthWrite: false,
+            side: THREE.DoubleSide,
+            alphaTest: 0.03,
+            color: new THREE.Color(0xaaaaaa) // gray tint (softer than black)
           });
           const aspect = meta?.aspect || (texture.image.width / texture.image.height || 2.0);
-          const W = 9.5, H = W / aspect;
+          const W = 19.0, H = W / aspect; // 2× bigger
           const geo = new THREE.PlaneGeometry(W, H);
           this.mesh = new THREE.Mesh(geo, mat);
           scene.add(this.mesh);
-          // Start fully offscreen on the LEFT so it slides in L→R
+          // start fully offscreen left so it slides in
           this.mesh.position.set(-13.6, this.y, this.z);
           this.mesh.rotation.y = 0;
         });
       }
       update(dt, t){
         if (!this.mesh) return;
-        // Motion
         this.mesh.position.x += this.dir * this.speed * dt;
         this.mesh.position.y = this.y + Math.sin(t * 0.25 + this.phase) * 0.12;
-        // Subtle opacity breathing
+        // soft "breathing" opacity
         this.mesh.material.opacity = THREE.MathUtils.clamp(
-          this.baseOpacity + Math.sin(t * 0.15 + this.phase) * 0.03, 0.6, 0.95
+          this.baseOpacity + Math.sin(t * 0.15 + this.phase) * 0.03, 0.55, 0.9
         );
-        // Bounds & flipping to ensure it goes fully offscreen before turning
-        if (this.dir > 0 && this.mesh.position.x > 13.6) {
-          // was moving right, just fully left the screen: flip and go left
+        // fully offscreen flip points
+        const RIGHT_OFF = 13.6;
+        const LEFT_OFF  = -13.6;
+        if (this.dir > 0 && this.mesh.position.x > RIGHT_OFF) {
           this.dir = -1;
           this.mesh.rotation.y = Math.PI;
-        } else if (this.dir < 0 && this.mesh.position.x < -13.6) {
-          // was moving left, just fully left the screen: flip and go right
+        } else if (this.dir < 0 && this.mesh.position.x < LEFT_OFF) {
           this.dir = 1;
           this.mesh.rotation.y = 0;
         }
       }
     }
-
     const SHARK = new BackgroundSharkPNG();
 
-    /* === Interaction (click fish; toggle thought bubbles) === */
+    /* === Interaction === */
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
     function onClick(e){
@@ -413,12 +376,45 @@
       camera.lookAt(0,0,0);
 
       for (const f of FISH) f.update(dt);
-      updateBubbles(dt);
+      // bubbles
+      const arr = bubbleGeo.attributes.position.array;
+      for (let i=0; i<220; i++){
+        let x = arr[i*3+0], y = arr[i*3+1], z = arr[i*3+2];
+        y += speeds[i] * dt; x += xDrifts[i] * dt * 0.4;
+        if (y > 3.2){ y = -3.2; x = rand(-6,6); z = rand(-4,4);
+          speeds[i] = rand(0.12, 0.45); xDrifts[i] = rand(-0.15, 0.15); }
+        arr[i*3+0] = x; arr[i*3+1] = y; arr[i*3+2] = z;
+      }
+      bubbleGeo.attributes.position.needsUpdate = true;
+
       SHARK.update(dt, t);
 
       renderer.render(scene, camera);
       requestAnimationFrame(tick);
     }
+
+    /* build bubbles geometry arrays now that tick uses them inline */
+    const bubbleCount = 220;
+    const bubbleGeo = new THREE.BufferGeometry();
+    const positions = new Float32Array(bubbleCount * 3);
+    const speeds = new Float32Array(bubbleCount);
+    const xDrifts = new Float32Array(bubbleCount);
+    for (let i=0; i<bubbleCount; i++){
+      positions[i*3+0] = rand(-6, 6);
+      positions[i*3+1] = rand(-3, 3);
+      positions[i*3+2] = rand(-4, 4);
+      speeds[i] = rand(0.12, 0.45);
+      xDrifts[i] = rand(-0.15, 0.15);
+    }
+    bubbleGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const bubbleMat = new THREE.PointsMaterial({
+      color: new THREE.Color(0xdff9ff),
+      size: 0.06, sizeAttenuation: true, transparent: true, opacity: 0.7,
+      depthWrite: false, blending: THREE.AdditiveBlending
+    });
+    const bubbles = new THREE.Points(bubbleGeo, bubbleMat);
+    scene.add(bubbles);
+
     requestAnimationFrame(tick);
   </script>
 </body>
