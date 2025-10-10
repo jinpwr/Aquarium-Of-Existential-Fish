@@ -27,7 +27,7 @@
       image-rendering:pixelated; background-size:4px; background-repeat:repeat; mix-blend-mode:overlay;
     }
 
-    /* footer title only (removed interaction hint text) */
+    /* footer title only */
     #overlay{
       position:fixed; inset:0; pointer-events:none; z-index:3;
       display:flex; align-items:flex-end; justify-content:flex-end;
@@ -51,7 +51,7 @@
 
     const camera = new THREE.PerspectiveCamera(65, innerWidth/innerHeight, 0.1, 200);
     camera.position.set(0, 2.2, 7);
-    camera.lookAt(0,0,0);  // fixed camera (no parallax)
+    camera.lookAt(0,0,0);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, premultipliedAlpha: false });
     renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -127,29 +127,43 @@
       for(const l of lines){ ctx.fillText(l,x,curY); curY+=lineHeight; }
     }
 
-    /* === Fish (high-contrast palette: yellow/red/pink) === */
-    const PALETTE = [0xffd84d, 0xffc400, 0xff4d57, 0xff6a6a, 0xff72c7, 0xff8adf];
+    /* === Pastel palette + shimmering materials === */
+    // Soft pastels (mint, lavender, peach, baby blue, pale yellow, blush pink, aqua, periwinkle, melon)
+    const PALETTE = [
+      0xCFF8E7, 0xE6D7FF, 0xFFD8C2, 0xD6ECFF, 0xFFF7B3,
+      0xFFD6E7, 0xCDEFFF, 0xDAD9FF, 0xFFEDDA
+    ];
+
     function makeMat(hex){
-      const base=new THREE.Color(hex);
-      return new THREE.MeshStandardMaterial({
+      const base = new THREE.Color(hex);
+      const emissiveCol = base.clone().lerp(new THREE.Color(0xffffff), 0.25); // gentle lightening for glow
+      const m = new THREE.MeshStandardMaterial({
         color: base,
-        emissive: base.clone().multiplyScalar(0.35),
-        emissiveIntensity: 1.0,
-        roughness: 0.38,
-        metalness: 0.18,
+        emissive: emissiveCol,
+        emissiveIntensity: 0.55,   // baseline glow (will pulse)
+        roughness: 0.42,
+        metalness: 0.08,
         flatShading: true
       });
+      // attach pulse params
+      m.userData.pulsePhase = Math.random()*Math.PI*2;
+      m.userData.pulseSpeed = rand(1.0, 1.6);   // "alive" shimmer
+      m.userData.pulseDepth = 0.38;             // how much it swings
+      m.userData.pulseBase  = 0.55;             // baseline intensity
+      return m;
     }
+
     function tint(hex, amt){
       const c = new THREE.Color(hex);
       return c.lerp(new THREE.Color(0xffffff), amt).getHex();
     }
+
     function makeFishMesh(){
       const g=new THREE.Group();
       const base = choose(PALETTE);
-      const bodyMat = makeMat(base);
-      const accentMat = makeMat(tint(base, 0.18));
-      const accentMat2= makeMat(tint(base, 0.30));
+      const bodyMat   = makeMat(base);
+      const accentMat = makeMat(tint(base, 0.16));
+      const accentMat2= makeMat(tint(base, 0.28));
 
       const bodyGeo=new THREE.IcosahedronGeometry(rand(0.25,0.38),0);
       bodyGeo.scale(rand(1.6,2.1),1,1);
@@ -167,13 +181,14 @@
       g.add(finL,finR);
 
       const eyeGeo=new THREE.SphereGeometry(0.04,12,12);
-      const eyeMat=new THREE.MeshStandardMaterial({ color:0xffffff, roughness:0.1, metalness:0.2 });
+      const eyeMat=new THREE.MeshStandardMaterial({ color:0xffffff, roughness:0.1, metalness:0.2, emissive:0x222222, emissiveIntensity:0.1 });
       const eyeL=new THREE.Mesh(eyeGeo,eyeMat), eyeR=new THREE.Mesh(eyeGeo,eyeMat);
       eyeL.position.set(0.4,0.06,0.12); eyeR.position.set(0.4,0.06,-0.12); g.add(eyeL,eyeR);
+
       return g;
     }
 
-    /* Keep fish on-screen: hard bounds + clamping */
+    /* Keep fish on-screen */
     const BOUNDS = { x: 5.8, y: 2.9, z: 3.8 };
 
     class Fish{
@@ -183,19 +198,28 @@
         this.bubble=makeBubbleSprite(choose(PHRASES)); this.bubble.position.set(0,0.9,0);
         this.group.add(this.bubble);
 
+        // cache all materials for pulsing
+        this.materials=[];
+        this.mesh.traverse(obj=>{
+          if(obj.isMesh && obj.material){
+            if(Array.isArray(obj.material)) this.materials.push(...obj.material);
+            else this.materials.push(obj.material);
+          }
+        });
+
         this.group.position.set(rand(-4,4), rand(-1.2,2.2), rand(-2.5,2.5));
         this.vel=new THREE.Vector3(rand(-0.02,0.02), rand(-0.01,0.01), rand(-0.015,0.015));
         this.turn=new THREE.Vector3(rand(-0.001,0.001), rand(-0.001,0.001), rand(-0.001,0.001));
         this.speed=rand(0.003,0.018);
         scene.add(this.group);
       }
-      update(dt){
-        // random wander
+      update(dt,t){
+        // wander
         this.vel.x += this.turn.x * dt; this.vel.y += this.turn.y * dt; this.vel.z += this.turn.z * dt;
         this.vel.clampLength(0, this.speed);
         this.group.position.addScaledVector(this.vel, dt * 60);
 
-        // clamp & bounce so fish never leave the view volume
+        // clamp & bounce
         const p = this.group.position, v = this.vel;
         if (p.x < -BOUNDS.x){ p.x = -BOUNDS.x; v.x = Math.abs(v.x); }
         if (p.x >  BOUNDS.x){ p.x =  BOUNDS.x; v.x = -Math.abs(v.x); }
@@ -214,6 +238,16 @@
         // fins wiggle, bubble faces camera
         this.mesh.children.forEach(c=>{ if(c.geometry && c.geometry.type==='ConeGeometry'){ c.rotation.y += 0.04; }});
         this.bubble.lookAt(camera.position);
+
+        // lively shimmer pulse
+        for(const m of this.materials){
+          if(!m.userData) continue;
+          const a = m.userData.pulseBase;
+          const b = m.userData.pulseDepth;
+          const s = m.userData.pulseSpeed;
+          // intensity swings between (a - b*0.5) and (a + b*0.5)
+          m.emissiveIntensity = a + (b * 0.5) * Math.sin(t * s * 2.2 + m.userData.pulsePhase);
+        }
       }
       randomThought(){ updateBubbleText(this.bubble, choose(PHRASES)); }
     }
@@ -267,18 +301,18 @@
       constructor(){
         this.mesh=null; this.dir=1; this.speed=0.55;
         this.y=rand(0.2,1.2); this.z=-7.8; this.phase=Math.random()*Math.PI*2;
-        this.flipBound=16.5;  // turn well offscreen
+        this.flipBound=16.5;
         loadSharkTexture(tex=>{
           if(!tex) return;
           const aspect = tex.image.width / tex.image.height;
-          const W = 9.5 * 2;  // 2× bigger
+          const W = 9.5 * 2;
           const H = W / aspect;
           const mat = new THREE.MeshBasicMaterial({
             map:tex, transparent:true, opacity:0.9*0.75, depthWrite:false,
             side:THREE.DoubleSide, alphaTest:0.03
           });
           this.mesh = new THREE.Mesh(new THREE.PlaneGeometry(W,H), mat);
-          this.mesh.position.set(-this.flipBound - 0.2, this.y, this.z); // start left & offscreen
+          this.mesh.position.set(-this.flipBound - 0.2, this.y, this.z);
           this.mesh.rotation.y = 0;
           scene.add(this.mesh);
         });
@@ -293,7 +327,7 @@
     }
     const SHARK = new Shark();
 
-    /* === Resize (no other input handlers) === */
+    /* === Resize === */
     addEventListener('resize', ()=>{
       camera.aspect = innerWidth/innerHeight;
       camera.updateProjectionMatrix();
@@ -306,7 +340,7 @@
       const dt = Math.min((now - last)/1000, 0.05); last = now;
       const t = now * 0.001;
 
-      for(const f of FISH) f.update(dt);
+      for(const f of FISH) f.update(dt,t);
       updateBubbles(dt);
       SHARK.update(dt,t);
 
