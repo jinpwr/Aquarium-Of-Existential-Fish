@@ -9,10 +9,12 @@
       height: 100%;
       margin: 0;
       overflow: hidden;
-      background: linear-gradient(to bottom,
-        hsl(230 55% 30%) 0%,
-        hsl(236 55% 20%) 40%,
-        hsl(242 55% 12%) 100%
+      /* 7) Realistic ocean gradient, constant hue; lightness animates in JS */
+      background: linear-gradient(
+        to bottom,
+        hsl(200 60% 36%) 0%,
+        hsl(200 60% 24%) 40%,
+        hsl(200 60% 12%) 100%
       );
     }
     canvas { display:block }
@@ -44,8 +46,9 @@
 <body>
   <div id="dither"></div>
   <div id="overlay"><div class="title">Aquarium of Existential Fish</div></div>
-  <div id="instructions">move mouse horizontally to look around (curved pan)
-click a fish to pause it, then it will fade and leave a note</div>
+
+  <!-- 8) Updated caption -->
+  <div id="instructions">move mouse horizontally to look around / try clicking on a fish</div>
 
   <script type="module">
     import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
@@ -68,33 +71,38 @@ click a fish to pause it, then it will fade and leave a note</div>
     renderer.toneMappingExposure = 0.9;
     document.body.appendChild(renderer.domElement);
 
-    /* ========== Lighting (dramatic, no emissive) ========== */
+    /* ========== Lighting ========== */
     const hemi = new THREE.HemisphereLight(0xaad9ff, 0x0b0018, 0.35);
     const key  = new THREE.DirectionalLight(0xb0d6ff, 1.4); key.position.set(4, 6, 2);
     const fill = new THREE.DirectionalLight(0x66ffd2, 0.35);  fill.position.set(-5, 2, -3);
     const rim  = new THREE.DirectionalLight(0x8b86ff, 0.9);   rim.position.set(0, 3.5, -6);
     scene.add(hemi, key, fill, rim);
 
-    /* ========== Helpers ========== */
     const rand = (a,b)=> a + Math.random()*(b-a);
     const choose = arr => arr[(Math.random()*arr.length)|0];
 
-    /* ========== BG hue lock (blue→violet) ========== */
-    const BG = { HUE_MIN:225, HUE_MAX:270, SAT:55, L1:30, L2:20, L3:12, speed:0.06 };
+    /* ========== 7) Ocean BG with constant hue, lightness breathing only ========== */
+    const BG = {
+      H: 200, SAT: 60,
+      L1: 36, L2: 24, L3: 12,
+      amp: 6,  // brightness swing
+      speed: 0.08
+    };
     function updateBackground(nowMs){
       const t = nowMs * 0.001;
-      const u = (Math.sin(t * BG.speed) + 1) / 2;
-      const hue = BG.HUE_MIN + u * (BG.HUE_MAX - BG.HUE_MIN);
-      const h1 = hue, h2 = (hue + 6) % 360, h3 = (hue + 12) % 360;
+      const lShift = Math.sin(t * BG.speed) * BG.amp;
+      const l1 = BG.L1 + lShift;
+      const l2 = BG.L2 + lShift * 0.7;
+      const l3 = BG.L3 + lShift * 0.4;
       document.body.style.background =
         `linear-gradient(to bottom,
-          hsl(${h1} ${BG.SAT}% ${BG.L1}%) 0%,
-          hsl(${h2} ${BG.SAT}% ${BG.L2}%) 40%,
-          hsl(${h3} ${BG.SAT}% ${BG.L3}%) 100%
+          hsl(${BG.H} ${BG.SAT}% ${l1}%) 0%,
+          hsl(${BG.H} ${BG.SAT}% ${l2}%) 40%,
+          hsl(${BG.H} ${BG.SAT}% ${l3}%) 100%
         )`;
     }
 
-    /* ========== God rays ========== */
+    /* ========== God rays (unchanged) ========== */
     function makeGodRay(){
       const geo = new THREE.ConeGeometry(6.5, 16, 64, 1, true);
       geo.rotateX(-Math.PI/2);
@@ -134,7 +142,7 @@ click a fish to pause it, then it will fade and leave a note</div>
     }
     const RAYS = []; for(let i=0;i<4;i++){ const r=makeGodRay(); RAYS.push(r); world.add(r); }
 
-    /* ========== Speech bubbles ========== */
+    /* ========== Speech bubbles (canvas-sprite) ========== */
     function makeBubbleSprite(text){
       const w=256,h=128;
       const cvs=document.createElement('canvas'); cvs.width=w; cvs.height=h;
@@ -185,26 +193,20 @@ click a fish to pause it, then it will fade and leave a note</div>
       for(const l of lines){ ctx.fillText(l,x,curY); curY+=lineHeight; }
     }
 
-    /* ========== NEW fine sand-like fish shader (more dramatic lighting) ========== */
-    const SHEEN_COLORS = [
-      new THREE.Color(0x7FFFD4), new THREE.Color(0x7FB3FF),
-      new THREE.Color(0x9A7BFF), new THREE.Color(0x66FFC2),
-      new THREE.Color(0x89A8FF), new THREE.Color(0x52E8FF)
-    ];
-
-    const FishSandMaterial = (sheenColor)=>{
+    /* ========== 5) Grainier fish shader (per-fish randomization) ========== */
+    const FishSandMaterial = (sheenColor, grainAmp=70, specPow=90, rimStr=0.45)=>{
       return new THREE.ShaderMaterial({
         transparent:true, depthWrite:true,
         uniforms:{
           uLightDir: { value: new THREE.Vector3().copy(key.position).normalize() },
-          uDark:     { value: new THREE.Color(0x0a0a12) },  // a bit lighter than before (avoid total crush)
+          uDark:     { value: new THREE.Color(0x0b0d12) },
           uSheen:    { value: sheenColor.clone() },
           uOpacity:  { value: 1.0 },
           uTime:     { value: 0 },
-          uGrain:    { value: 42.0 },
-          uSpecPow:  { value: 72.0 },
+          uGrain:    { value: grainAmp },
+          uSpecPow:  { value: specPow },
           uRimPow:   { value: 2.2 },
-          uRimStr:   { value: 0.38 }
+          uRimStr:   { value: rimStr }
         },
         vertexShader:/*glsl*/`
           precision mediump float;
@@ -234,7 +236,7 @@ click a fish to pause it, then it will fade and leave a note</div>
           }
           float grain(vec3 p){
             float g = hash(p*uGrain);
-            g = mix(g, hash(p*uGrain*1.7), 0.5);
+            g = mix(g, hash(p*uGrain*1.7), 0.65);
             return g;
           }
 
@@ -250,9 +252,9 @@ click a fish to pause it, then it will fade and leave a note</div>
             float spec = pow(max(dot(N,H), 0.0), uSpecPow);
             float rim = pow(1.0 - max(dot(N,V), 0.0), uRimPow) * uRimStr;
 
-            float g = grain(vW + vec3(0.0, uTime*0.15, 0.0));
-            float grainDark = mix(0.7, 1.0, g);
-            float grainLight = mix(0.85, 1.18, g);
+            float g = grain(vW + vec3(0.0, uTime*0.2, 0.0));
+            float grainDark = mix(0.6, 1.05, g);
+            float grainLight = mix(0.8, 1.25, g);
 
             vec3 colDark = uDark * grainDark;
             vec3 colSheen = uSheen * (0.35 + 0.65*diffuse) * grainLight;
@@ -268,7 +270,6 @@ click a fish to pause it, then it will fade and leave a note</div>
       });
     };
 
-    /* ========== UV helper (make sure icosahedrons have UVs) ========== */
     function ensureSphericalUVs(geo){
       if(geo.attributes.uv) return;
       const pos = geo.attributes.position;
@@ -284,12 +285,13 @@ click a fish to pause it, then it will fade and leave a note</div>
       geo.attributes.uv.needsUpdate = true;
     }
 
-    /* ========== Fish (tail pivot, pause→fade, bubble stays) ========== */
-    const PHRASES = [
-      'i am not real','today i forgot myself','be kind to the void','do fish dream?',
-      '404: meaning not found','blink slowly','pretend to be water','becoming … becoming','a small thought floats'
-    ];
-    const BOUNDS = { x: 5.8, y: 2.9, z: 3.8 };
+    /* ========== 1) Rainbow-distinct fish hues + 6) tail flipped on Z ========== */
+    const RAINBOW_HUES = [0, 25, 45, 60, 90, 120, 160, 180, 200, 220, 250, 280, 300, 330]; // degrees
+    let huePool = [...RAINBOW_HUES];
+    function nextRainbowHue(){
+      if(!huePool.length) huePool = [...RAINBOW_HUES];
+      return huePool.splice((Math.random()*huePool.length)|0, 1)[0];
+    }
 
     function makeFishMesh(){
       const g=new THREE.Group(); g.userData.isFish = true;
@@ -302,30 +304,39 @@ click a fish to pause it, then it will fade and leave a note</div>
       bodyGeo.scale(sx, 1, 1);
       ensureSphericalUVs(bodyGeo);
 
-      const sheen = choose(SHEEN_COLORS);
-      const bodyMat = FishSandMaterial(sheen);
+      // Rainbow sheen
+      const hue = nextRainbowHue()/360;
+      const sheen = new THREE.Color().setHSL(hue, 0.85, 0.62);
+
+      // Per-fish grain constants
+      const grain = rand(70, 110);
+      const spec  = rand(80, 110);
+      const rim   = rand(0.38, 0.55);
+
+      const bodyMat = FishSandMaterial(sheen, grain, spec, rim);
       const body=new THREE.Mesh(bodyGeo, bodyMat); g.add(body);
 
-      // Tail
+      // Tail (flip on Z)
       const tailLen = 0.38;
       const tailGeo=new THREE.ConeGeometry(0.20, tailLen, 5);
       tailGeo.translate(0, -tailLen*0.5, 0);
       ensureSphericalUVs(tailGeo);
-      const tailMat = FishSandMaterial(sheen);
+      const tailMat = FishSandMaterial(sheen, grain, spec, rim);
       const tailMesh=new THREE.Mesh(tailGeo, tailMat);
 
       const tailPivot = new THREE.Group();
       tailPivot.add(tailMesh);
       tailPivot.rotation.z = Math.PI/2;
+      tailPivot.scale.z = -1; // <-- 6) flip on Z to fix attachment/clipping
       const bodyMinX = -radius * sx;
       tailPivot.position.set(bodyMinX - 0.06, 0, 0);
       g.add(tailPivot);
 
-      // Fins
+      // Fins (triangular, already)
       const finGeo=new THREE.ConeGeometry(0.08,0.18,5);
       finGeo.translate(0, -0.09, 0);
       ensureSphericalUVs(finGeo);
-      const finMat = FishSandMaterial(sheen);
+      const finMat = FishSandMaterial(sheen, grain, spec, rim);
       const finL=new THREE.Mesh(finGeo,finMat);
       const finR=new THREE.Mesh(finGeo,finMat.clone());
       finL.position.set(0.08,-0.05, 0.16); finL.rotation.z=-Math.PI/2.6;
@@ -338,7 +349,11 @@ click a fish to pause it, then it will fade and leave a note</div>
       const eyeL=new THREE.Mesh(eyeGeo,eyeMat), eyeR=new THREE.Mesh(eyeGeo,eyeMat);
       eyeL.position.set(0.42,0.06,0.12); eyeR.position.set(0.42,0.06,-0.12); g.add(eyeL,eyeR);
 
-      // Bubble
+      // Thought bubble (random existential message)
+      const PHRASES = [
+        'i am not real','today i forgot myself','be kind to the void','do fish dream?',
+        '404: meaning not found','blink slowly','pretend to be water','becoming … becoming','a small thought floats'
+      ];
       const bubble=makeBubbleSprite(choose(PHRASES)); bubble.position.set(0,0.9,0); g.add(bubble);
 
       g.userData = {
@@ -363,13 +378,31 @@ click a fish to pause it, then it will fade and leave a note</div>
         this.fading = false;
         this.fade = 1.0;
         this.pauseTimer = 0;
+
+        // For memorial bubble timing
+        this.spawnedMem = false;
+        this.memSprite = null;
       }
       update(dt, t){
         if(!this.group) return;
 
         if(this.paused && !this.fading){
           this.pauseTimer += dt;
-          if(this.pauseTimer >= 0.35){ this.fading = true; }
+          if(this.pauseTimer >= 0.02){ // almost immediate
+            this.fading = true;
+
+            // 3) As fade begins, immediately switch text & keep it visible
+            updateBubbleText(this.group.userData.bubble, 'I will remember this');
+            this.group.userData.bubble.material.opacity = 1.0;
+
+            // Also spawn a decoupled memorial sprite at the same world position (stays while fish fades)
+            const bubblePos = this.group.localToWorld(new THREE.Vector3(0,0.9,0));
+            this.memSprite = makeBubbleSprite('I will remember this');
+            this.memSprite.position.copy(bubblePos);
+            this.memSprite.material.opacity = 1.0;
+            world.add(this.memSprite);
+            this.spawnedMem = true;
+          }
         }
 
         if(!this.paused){
@@ -379,6 +412,7 @@ click a fish to pause it, then it will fade and leave a note</div>
         }
 
         const p = this.group.position, v = this.vel;
+        const BOUNDS = { x: 5.8, y: 2.9, z: 3.8 };
         if (p.x < -BOUNDS.x){ p.x = -BOUNDS.x; v.x = Math.abs(v.x); }
         if (p.x >  BOUNDS.x){ p.x =  BOUNDS.x; v.x = -Math.abs(v.x); }
         if (p.y < -BOUNDS.y){ p.y = -BOUNDS.y; v.y = Math.abs(v.y); }
@@ -399,36 +433,41 @@ click a fish to pause it, then it will fade and leave a note</div>
         });
 
         this.group.userData.bubble.lookAt(camera.position);
+        if(this.memSprite) this.memSprite.lookAt(camera.position);
 
         for(const m of this.group.userData.mats){ m.uniforms.uTime.value = t; }
 
+        // Fade sequence
         if(this.fading){
           this.fade = Math.max(0, this.fade - dt*0.6);
           for(const m of this.group.userData.mats){ m.uniforms.uOpacity.value = this.fade; }
-          this.group.userData.bubble.material.opacity = this.fade;
           this.group.userData.eyes.forEach(e=>{ e.material.opacity = this.fade; });
+          // Keep the fish-attached bubble fully visible while the fish fades
+          this.group.userData.bubble.material.opacity = 1.0;
+
           if(this.fade<=0.0){
-            const bubblePos = this.group.localToWorld(new THREE.Vector3(0,0.9,0));
             world.remove(this.group);
             this.group.traverse(o=>{
               if(o.material){ o.material.dispose?.(); if(o.material.map) o.material.map.dispose?.(); }
               if(o.geometry){ o.geometry.dispose?.(); }
             });
-            const mem = makeBubbleSprite('i will remember this.');
-            mem.position.copy(bubblePos);
-            world.add(mem);
-            const start = performance.now(), wait = 2200, fadeDur = 1300;
-            const tickMem = (now)=>{
-              const tms = now - start;
-              if(tms > wait){
-                const a = 1 - (tms - wait)/fadeDur;
-                mem.material.opacity = Math.max(0, a);
-                if(a<=0){ world.remove(mem); mem.material.map.dispose(); mem.material.dispose(); return; }
-              }
-              requestAnimationFrame(tickMem);
-            };
-            requestAnimationFrame(tickMem);
             this.group = null;
+
+            // After fish gone, let the memorial bubble linger then fade out
+            if(this.memSprite){
+              const start = performance.now(), wait = 2200, fadeDur = 1300;
+              const mem = this.memSprite;
+              const tickMem = (now)=>{
+                const tms = now - start;
+                if(tms > wait){
+                  const a = 1 - (tms - wait)/fadeDur;
+                  mem.material.opacity = Math.max(0, a);
+                  if(a<=0){ world.remove(mem); mem.material.map.dispose(); mem.material.dispose(); return; }
+                }
+                requestAnimationFrame(tickMem);
+              };
+              requestAnimationFrame(tickMem);
+            }
           }
         }
       }
@@ -437,6 +476,7 @@ click a fish to pause it, then it will fade and leave a note</div>
 
     const FISH=[]; for(let i=0;i<24;i++) FISH.push(new Fish());
 
+    // Rotate random thoughts for the *floating* bubble pre-click
     setInterval(()=>{
       const alive = FISH.filter(f=>f.group && !f.fading);
       if(!alive.length) return;
@@ -447,7 +487,7 @@ click a fish to pause it, then it will fade and leave a note</div>
       ]));
     }, 2000);
 
-    /* ========== Water bubbles ========== */
+    /* ========== 2) Water bubbles with specular highlights (shader) ========== */
     const bubbleCount=220;
     const bubbleGeo=new THREE.BufferGeometry();
     const positions=new Float32Array(bubbleCount*3);
@@ -461,10 +501,56 @@ click a fish to pause it, then it will fade and leave a note</div>
       xDrifts[i]=rand(-0.15,0.15);
     }
     bubbleGeo.setAttribute('position', new THREE.BufferAttribute(positions,3));
-    const bubbleMat=new THREE.PointsMaterial({
-      color:0xdff9ff, size:0.06, sizeAttenuation:true, transparent:true, opacity:0.7,
-      depthWrite:false, blending:THREE.AdditiveBlending
+
+    const bubbleMat = new THREE.ShaderMaterial({
+      transparent:true, depthWrite:false, blending:THREE.AdditiveBlending,
+      uniforms:{
+        uSize:{value: 0.06 * window.devicePixelRatio},
+        uOpacity:{value: 0.85},
+        uLightDirView:{value: new THREE.Vector3()},
+      },
+      vertexShader:/*glsl*/`
+        attribute vec3 position;
+        uniform float uSize;
+        varying vec3 vPosView;
+        void main(){
+          vec4 posView = modelViewMatrix * vec4(position,1.0);
+          vPosView = posView.xyz;
+          gl_Position = projectionMatrix * posView;
+          gl_PointSize = uSize * (300.0 / -posView.z);
+        }
+      `,
+      fragmentShader:/*glsl*/`
+        precision mediump float;
+        uniform float uOpacity;
+        uniform vec3 uLightDirView;
+        varying vec3 vPosView;
+
+        void main(){
+          // disc mask
+          vec2 uv = gl_PointCoord * 2.0 - 1.0;
+          float r = length(uv);
+          if(r>1.0) discard;
+
+          // soft rim
+          float alpha = smoothstep(1.0, 0.7, r);
+
+          // highlight shifted toward light direction projected in screen
+          vec2 L = normalize(uLightDirView.xy);
+          float shift = 0.35;
+          vec2 hCenter = L * shift;
+          float hr = length(uv - hCenter);
+          float highlight = smoothstep(0.45, 0.0, hr);
+
+          // base color cool aqua
+          vec3 base = vec3(0.82, 0.96, 1.0);
+          vec3 color = base * (0.35 + 0.65*alpha) + vec3(1.0) * highlight;
+
+          gl_FragColor = vec4(color, (alpha*0.55 + highlight*0.6) * uOpacity);
+        }
+      `
     });
+
     const bubbles=new THREE.Points(bubbleGeo,bubbleMat); world.add(bubbles);
     function updateBubbles(dt){
       const arr=bubbleGeo.attributes.position.array;
@@ -477,9 +563,14 @@ click a fish to pause it, then it will fade and leave a note</div>
         arr[i*3+0]=x; arr[i*3+1]=y; arr[i*3+2]=z;
       }
       bubbleGeo.attributes.position.needsUpdate=true;
+
+      // update light dir in view space for highlights
+      const Lw = new THREE.Vector3().copy(key.position).normalize();
+      const Lv = Lw.clone().applyMatrix3(new THREE.Matrix3().setFromMatrix4(camera.matrixWorldInverse));
+      bubbleMat.uniforms.uLightDirView.value.copy(Lv);
     }
 
-    /* ========== Shark (visible & unfogged) ========== */
+    /* ========== Shark (unchanged) ========== */
     const SHARK_SRC='shark.png';
     class Shark {
       constructor(){
@@ -511,10 +602,11 @@ click a fish to pause it, then it will fade and leave a note</div>
     }
     const SHARK = new Shark();
 
-    /* ========== Curved pan (parallax + yaw) ========== */
+    /* ========== 4) Curved parallax (outward/convex from POV) ========== */
     let mouseX = 0; // -1..1
     const panRange = 1.2;
     const yawRange = THREE.MathUtils.degToRad(6);
+    const bowAmount = 0.35; // convex bow toward viewer at center
     addEventListener('pointermove', (e)=>{
       const nx = (e.clientX / innerWidth) * 2 - 1;
       mouseX = THREE.MathUtils.clamp(nx, -1, 1);
@@ -543,6 +635,8 @@ click a fish to pause it, then it will fade and leave a note</div>
       camera.aspect = innerWidth/innerHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(innerWidth, innerHeight);
+      // match bubble size to DPR
+      if(bubbleMat.uniforms?.uSize) bubbleMat.uniforms.uSize.value = 0.06 * window.devicePixelRatio;
     });
 
     /* ========== Animate ========== */
@@ -560,10 +654,15 @@ click a fish to pause it, then it will fade and leave a note</div>
         r.position.z += Math.cos(t * r.userData.speed + r.id)*0.0006;
       }
 
-      const targetX = -Math.sin(mouseX * Math.PI/2) * panRange;
-      world.position.x = THREE.MathUtils.lerp(world.position.x, targetX, 0.08);
-      const targetYaw = -mouseX * yawRange;
-      world.rotation.y = THREE.MathUtils.lerp(world.rotation.y, targetYaw, 0.08);
+      // 4) outward convex arc:
+      // world y-rotation follows mouse; x-translation follows a sine
+      const targetX =  Math.sin(mouseX * Math.PI/2) * panRange; // flipped sign from original
+      const targetYaw =  mouseX * yawRange;                      // flipped sign from original
+      // small z-bow that bulges *toward* camera at center and eases toward edges
+      const bow = (1.0 - Math.cos(mouseX * Math.PI/2)) * bowAmount;
+      world.position.x = THREE.MathUtils.lerp(world.position.x, targetX, 0.1);
+      world.rotation.y = THREE.MathUtils.lerp(world.rotation.y, targetYaw, 0.1);
+      world.position.z = THREE.MathUtils.lerp(world.position.z, bow, 0.1);
 
       for(const f of FISH) f.update(dt, t);
       SHARK.update(dt,t);
