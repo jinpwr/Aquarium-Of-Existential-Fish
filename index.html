@@ -541,6 +541,7 @@
         arr[i*3+0]=x; arr[i*3+1]=y; arr[i*3+2]=z;
       }
       bubbleGeo.attributes.position.needsUpdate=true;
+      bubbleMat.uniforms.uTime.value = (performance.now()*0.001);
     }
 
     /* ===== Shark (visible & unfogged) ===== */
@@ -627,7 +628,6 @@
 
     /* ===== Animate ===== */
     let last = performance.now();
-    function updateBubbles(dt){ /* defined above, kept here for closure usage */ }
     function tick(now){
       const dt = Math.min((now - last)/1000, 0.05); last = now;
       const t = now * 0.001;
@@ -647,21 +647,7 @@
 
       for(const f of FISH) f.update(dt, t);
       SHARK.update(dt,t);
-
-      // bubbles
-      (function bubblesStep(){
-        const arr=bubbleGeo.attributes.position.array;
-        for(let i=0;i<bubbleCount;i++){
-          let x=arr[i*3+0], y=arr[i*3+1], z=arr[i*3+2];
-          y += speeds[i]*dt; x += xDrifts[i]*dt*0.4;
-          if(y>3.2){ y=-3.2; x=rand(-6,6); z=rand(-4,4);
-            speeds[i]=rand(0.12,0.45); xDrifts[i]=rand(-0.15,0.15);
-          }
-          arr[i*3+0]=x; arr[i*3+1]=y; arr[i*3+2]=z;
-        }
-        bubbleGeo.attributes.position.needsUpdate=true;
-        bubbleMat.uniforms.uTime.value = t;
-      })();
+      updateBubbles(dt); // single definition used
 
       renderer.render(scene, camera);
       requestAnimationFrame(tick);
