@@ -58,7 +58,7 @@
     renderer.setSize(innerWidth, innerHeight);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 0.9; // LOWER for richer, non-washed pastels
+    renderer.toneMappingExposure = 0.9; // keep pastels vivid, not washed
     document.body.appendChild(renderer.domElement);
 
     /* === Lighting === */
@@ -127,78 +127,81 @@
       for(const l of lines){ ctx.fillText(l,x,curY); curY+=lineHeight; }
     }
 
-    /* === Cool pastel palette (vivid) === */
-    const PALETTE = [
-      0x7FD4FF, // brighter baby blue
-      0x8EC7FF, // bluebell
-      0x80FFE9, // mint aqua
-      0x8FCFFF, // powder blue
-      0xA4A0FF, // periwinkle
-      0xB095FF, // lavender
-      0x7FE4D1, // seafoam
-      0x84C9FF, // sky blue
-      0xA7C2FF  // soft ice
+    /* === Unified pastel tone across MANY hues ===
+       We pick hues from across the wheel (including pink/red/yellow)
+       but constrain saturation/lightness so everything feels pastel together.
+    */
+    const HUES_DEG = [
+      // cools
+      170, 190, 205, 220, 235,
+      // pinks/magentas
+      300, 315, 330,
+      // reds
+      350, 0, 10, 20,
+      // yellows/oranges
+      35, 45, 52, 58
     ];
 
-    // Boost saturation & slightly darken lightness to avoid washout
-    function colorFromHexBoosted(hex, satBoost=1.4){
-      const c = new THREE.Color(hex);
-      const hsl = {h:0,s:0,l:0};
-      c.getHSL(hsl);
-      hsl.s = Math.min(1, hsl.s * satBoost);
-      hsl.l = Math.max(0, Math.min(1, hsl.l * 0.92)); // darker mids for contrast
-      const out = new THREE.Color();
-      out.setHSL(hsl.h, hsl.s, hsl.l);
-      return out;
+    // Global pastel tone (consistent look)
+    const PASTEL_SAT = 0.60;   // 0..1 pastel-friendly saturation
+    const PASTEL_LIT = 0.70;   // 0..1 pastel-friendly lightness
+
+    // Small per-fish variance (keeps cohesion)
+    const VAR_SAT = 0.08;      // ± variance
+    const VAR_LIT = 0.06;
+
+    function colorFromHSL(hDeg, s=PASTEL_SAT, l=PASTEL_LIT, sJit=VAR_SAT, lJit=VAR_LIT){
+      const h = ((hDeg % 360)+360)/360;
+      const sj = Math.max(0, Math.min(1, s + rand(-sJit, sJit)));
+      const lj = Math.max(0, Math.min(1, l + rand(-lJit, lJit)));
+      const c = new THREE.Color();
+      c.setHSL(h, sj, lj);
+      return c;
     }
 
-    function makeMat(hex){
-      const base = colorFromHexBoosted(hex, 1.4);
-      // Emissive biased toward the same hue (very little white mixing)
-      const emissiveCol = base.clone();
+    // Create a base color for a fish (body) and two tints (fins/tail) with same tone
+    function makeToneFamily(){
+      const hue = choose(HUES_DEG);
+      const base = colorFromHSL(hue);
+      // Slightly lighter tints, reboost saturation a touch to keep them visible but pastel
+      const fin1 = base.clone(); {
+        const hsl = {h:0,s:0,l:0}; fin1.getHSL(hsl);
+        fin1.setHSL(hsl.h, Math.min(1, hsl.s*1.05), Math.min(1, hsl.l*1.06));
+      }
+      const fin2 = base.clone(); {
+        const hsl = {h:0,s:0,l:0}; fin2.getHSL(hsl);
+        fin2.setHSL(hsl.h, Math.min(1, hsl.s*1.08), Math.min(1, hsl.l*1.10));
+      }
+      return { base, fin1, fin2 };
+    }
 
+    /* === Materials (pastel shimmer, same tone rules) === */
+    function makeMat(color){
+      const emissiveCol = color.clone(); // emissive matches hue (no whitewash)
       const m = new THREE.MeshStandardMaterial({
-        color: base,
+        color,
         emissive: emissiveCol,
-        emissiveIntensity: 0.85, // brighter but hue-true
+        emissiveIntensity: 0.82,
         roughness: 0.38,
         metalness: 0.06,
         flatShading: true
       });
-
       // lively pulse
       m.userData.pulsePhase = Math.random()*Math.PI*2;
-      m.userData.pulseSpeed = rand(1.2, 1.9);
-      m.userData.pulseDepth = 0.55;  // noticeable shimmer
+      m.userData.pulseSpeed = rand(1.25, 1.95);
+      m.userData.pulseDepth = 0.52;
       m.userData.pulseBase  = 0.80;
-
-      // tiny hue jitter to diversify individuals (stay cool range)
-      const hsl = {h:0,s:0,l:0};
-      m.color.getHSL(hsl);
-      hsl.h = (hsl.h + rand(-0.025, 0.025) + 1) % 1.0;
-      m.color.setHSL(hsl.h, hsl.s, hsl.l);
-      const eHSL = {h:0,s:0,l:0};
-      m.emissive.getHSL(eHSL);
-      m.emissive.setHSL(hsl.h, eHSL.s, eHSL.l);
       return m;
-    }
-
-    function tint(hex, amt){
-      const c = new THREE.Color(hex);
-      c.lerp(new THREE.Color(0xffffff), amt);
-      // re-boost saturation after tinting
-      const hsl = {h:0,s:0,l:0};
-      c.getHSL(hsl);
-      c.setHSL(hsl.h, Math.min(1, hsl.s*1.15), Math.max(0, Math.min(1, hsl.l*0.94)));
-      return c.getHex();
     }
 
     function makeFishMesh(){
       const g=new THREE.Group();
-      const base = choose(PALETTE);
-      const bodyMat   = makeMat(base);
-      const accentMat = makeMat(tint(base, 0.10));
-      const accentMat2= makeMat(tint(base, 0.18));
+
+      // unified pastel tone but different hues (incl. pink/yellow/red)
+      const tone = makeToneFamily();
+      const bodyMat   = makeMat(tone.base);
+      const accentMat = makeMat(tone.fin1);
+      const accentMat2= makeMat(tone.fin2);
 
       const bodyGeo=new THREE.IcosahedronGeometry(rand(0.25,0.38),0);
       bodyGeo.scale(rand(1.6,2.1),1,1);
@@ -274,7 +277,7 @@
         this.mesh.children.forEach(c=>{ if(c.geometry && c.geometry.type==='ConeGeometry'){ c.rotation.y += 0.04; }});
         this.bubble.lookAt(camera.position);
 
-        // multicolor lively shimmer (per-material)
+        // shimmer pulse
         for(const m of this.materials){
           if(!m.userData) continue;
           const a = m.userData.pulseBase;
@@ -286,7 +289,8 @@
       randomThought(){ updateBubbleText(this.bubble, choose(PHRASES)); }
     }
 
-    const FISH=[]; for(let i=0;i<18;i++) FISH.push(new Fish());
+    // Slightly larger school to showcase breadth of hues
+    const FISH=[]; for(let i=0;i<24;i++) FISH.push(new Fish());
     setInterval(()=>{ const f = choose(FISH); if (f) f.randomThought(); }, 1800);
 
     /* === Floating water bubbles === */
