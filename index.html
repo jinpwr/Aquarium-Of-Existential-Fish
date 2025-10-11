@@ -207,12 +207,12 @@
     }
     const RAINBOW_SHEENS = rainbowSheenList(32);
 
-    /* ===== Fish shader: fine sand grain, dramatic light (FIX: declare cameraPosition) ===== */
+    /* ===== Fish shader: fine sand grain, dramatic light (declares cameraPosition) ===== */
     const FishSandMaterial = (sheenColor)=>{
       return new THREE.ShaderMaterial({
         transparent:true, depthWrite:true, fog:true,
         uniforms:{
-          uLightDir: { value: new THREE.Vector3().copy(key.position) }, // will normalize in shader
+          uLightDir: { value: key.position.clone() }, // use light position
           uDark:     { value: new THREE.Color(0x0e0e18) },
           uSheen:    { value: sheenColor.clone() },
           uOpacity:  { value: 1.0 },
@@ -242,7 +242,7 @@
           varying vec2 vUv;
           uniform vec3 uLightDir, uDark, uSheen;
           uniform float uOpacity, uTime, uGrain, uSpecPow, uRimPow, uRimStr;
-          uniform vec3 cameraPosition;     // <-- REQUIRED for ShaderMaterial
+          uniform vec3 cameraPosition;
 
           float hash(vec3 p){
             p = fract(p * 0.3183099 + vec3(0.1,0.2,0.3));
@@ -258,8 +258,8 @@
 
           void main(){
             vec3 N = normalize(vN);
-            vec3 L = normalize(uLightDir - vW);      // use light POSITION → direction
-            vec3 V = normalize(cameraPosition - vW); // now valid
+            vec3 L = normalize(uLightDir - vW);      // light position → direction
+            vec3 V = normalize(cameraPosition - vW);
             vec3 H = normalize(L + V);
 
             float ndotl = max(dot(N,L), 0.0);
@@ -462,22 +462,6 @@
       triggerFade(){ if(!this.fading && this.group) this.paused = true; }
     }
 
-    // School with DISTINCT rainbow hues
-    const FISH=[];
-    const count = 24;
-    for(let i=0;i<count;i++){
-      const sheen = RAINBOW_SHEENS[i % RAINBOW_SHEENS.length];
-      FISH.push(new Fish(sheen));
-    }
-
-    // Random thoughts
-    setInterval(()=>{
-      const alive = FISH.filter(f=>f.group && !f.fading);
-      if(!alive.length) return;
-      const f = choose(alive);
-      if (f) updateBubbleText(f.group.userData.bubble, choose(PHRASES));
-    }, 2000);
-
     /* ===== Sparkling water bubbles (lit) ===== */
     const bubbleCount=260;
     const bubbleGeo=new THREE.BufferGeometry();
@@ -618,8 +602,8 @@
       }
     });
 
-    /* ===== Build school (distinct rainbow hues) ===== */
-    const FISH=[];
+    /* ===== Build school (distinct rainbow hues) — SINGLE DECLARATION ===== */
+    const FISH = [];
     const count = 24;
     for(let i=0;i<count;i++){
       const sheen = RAINBOW_SHEENS[i % RAINBOW_SHEENS.length];
@@ -643,6 +627,7 @@
 
     /* ===== Animate ===== */
     let last = performance.now();
+    function updateBubbles(dt){ /* defined above, kept here for closure usage */ }
     function tick(now){
       const dt = Math.min((now - last)/1000, 0.05); last = now;
       const t = now * 0.001;
@@ -662,8 +647,21 @@
 
       for(const f of FISH) f.update(dt, t);
       SHARK.update(dt,t);
-      updateBubbles(dt);
-      bubbleMat.uniforms.uTime.value = t;
+
+      // bubbles
+      (function bubblesStep(){
+        const arr=bubbleGeo.attributes.position.array;
+        for(let i=0;i<bubbleCount;i++){
+          let x=arr[i*3+0], y=arr[i*3+1], z=arr[i*3+2];
+          y += speeds[i]*dt; x += xDrifts[i]*dt*0.4;
+          if(y>3.2){ y=-3.2; x=rand(-6,6); z=rand(-4,4);
+            speeds[i]=rand(0.12,0.45); xDrifts[i]=rand(-0.15,0.15);
+          }
+          arr[i*3+0]=x; arr[i*3+1]=y; arr[i*3+2]=z;
+        }
+        bubbleGeo.attributes.position.needsUpdate=true;
+        bubbleMat.uniforms.uTime.value = t;
+      })();
 
       renderer.render(scene, camera);
       requestAnimationFrame(tick);
