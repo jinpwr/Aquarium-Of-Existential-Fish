@@ -6,7 +6,7 @@
   <title>Aquarium of Existential Fish</title>
   <style>
     html, body { height:100%; margin:0; overflow:hidden;
-      /* BG (light → dark) */
+      /* BG (light → dark) from your gradient ref */
       background: linear-gradient(to bottom,#004f9c 0%,#002144 48%,#000b17 100%);
     }
     canvas{display:block}
@@ -31,11 +31,10 @@
     const world = new THREE.Group(); scene.add(world);
     scene.fog = new THREE.FogExp2(0x0c1526, 0.055);
 
-    // camera sits on a rig we rotate for curved parallax
-    const rig = new THREE.Group(); scene.add(rig);
+    // 1) Camera recentered and fixed (no rig/orbit)
     const camera = new THREE.PerspectiveCamera(65, innerWidth/innerHeight, 0.1, 200);
-    camera.position.set(0, 2.2, 7); // radius from origin
-    rig.add(camera);
+    camera.position.set(0, 2.2, 7);   // same base height as your earlier centered setup
+    camera.rotation.set(0, 0, 0);     // ensure no inherited tilt
 
     const renderer = new THREE.WebGLRenderer({antialias:true, alpha:true, premultipliedAlpha:false});
     renderer.setPixelRatio(Math.min(devicePixelRatio,2));
@@ -49,14 +48,14 @@
     const hemi = new THREE.HemisphereLight(0xaad9ff, 0x0b0018, 0.35);
     const key  = new THREE.DirectionalLight(0xb0d6ff, 1.35); key.position.set(4,6,2);
     const fill = new THREE.DirectionalLight(0x66ffd2, 0.35); fill.position.set(-5,2,-3);
-    const rim  = new THREE.DirectionalLight(0x8b86ff, 0.9); rim.position.set(0,3.5,-6);
+    const rim  = new THREE.DirectionalLight(0x8b86ff, 0.9);  rim.position.set(0,3.5,-6);
     scene.add(hemi,key,fill,rim);
 
     /* ===== helpers ===== */
     const rand=(a,b)=>a+Math.random()*(b-a);
     const choose=a=>a[(Math.random()*a.length)|0];
 
-    /* ===== god rays (unchanged) ===== */
+    /* ===== god rays ===== */
     function makeGodRay(){
       const geo = new THREE.ConeGeometry(6.5,16,64,1,true);
       geo.rotateX(-Math.PI/2);
@@ -77,9 +76,9 @@
     }
     const RAYS=[]; for(let i=0;i<4;i++){ const r=makeGodRay(); RAYS.push(r); world.add(r); }
 
-    /* ===== bubbles (speech) ===== */
+    /* ===== speech bubbles ===== */
     function makeBubbleSprite(text){
-      const w=256,h=128, cvs=document.createElement('canvas'); cvs.width=w; cvs.height=h;
+      const w=256,h=128,cvs=document.createElement('canvas'); cvs.width=w; cvs.height=h;
       const ctx=cvs.getContext('2d');
       draw(text);
       function draw(t){
@@ -152,13 +151,13 @@
       geo.setAttribute('uv', new THREE.BufferAttribute(uv,2)); geo.attributes.uv.needsUpdate=true;
     }
 
-    /* ===== palette from image #2 ===== */
+    /* ===== 3) NEW fish palette (from your image) ===== */
     const PALETTE=[
-      new THREE.Color('#aa4158'),
-      new THREE.Color('#eeb3ad'),
-      new THREE.Color('#dccfc2'),
-      new THREE.Color('#364e88'),
-      new THREE.Color('#2b2845')
+      new THREE.Color('#82b8c8'), // pastel blue
+      new THREE.Color('#efe58c'), // soft yellow
+      new THREE.Color('#3fd6c9'), // mint/teal
+      new THREE.Color('#b46fb1'), // mauve purple
+      new THREE.Color('#f28a65')  // peach orange
     ];
     const TOTAL_FISH=24;
 
@@ -175,13 +174,12 @@
       ensureSphericalUVs(bodyGeo);
       const body=new THREE.Mesh(bodyGeo, FishSandMaterial(sheenColor)); g.add(body);
 
-      // 1) SOLID tail cone, tip attached (hinge), base wags
+      // solid tail cone (tip attached, base wags)
       const tailLen=0.38;
-      const tailGeo=new THREE.ConeGeometry(0.20, tailLen, 12, 1, false); // <-- openEnded=false (solid)
-      tailGeo.translate(0, -tailLen*0.5, 0);  // tip at y=0
-      tailGeo.rotateZ(-Math.PI/2);            // point along +X
+      const tailGeo=new THREE.ConeGeometry(0.20, tailLen, 12, 1, false);
+      tailGeo.translate(0, -tailLen*0.5, 0);
+      tailGeo.rotateZ(-Math.PI/2);
       const tailMesh=new THREE.Mesh(tailGeo, FishSandMaterial(sheenColor));
-
       const tailPivot=new THREE.Group(); tailPivot.add(tailMesh);
       const bodyMinX=-radius*sx;
       tailPivot.position.set(bodyMinX-0.06,0,0);
@@ -251,22 +249,20 @@
         for(const m of this.group.userData.mats){ m.uniforms.uTime.value=t; }
 
         if(this.fading){
-          // create memory bubble once and manage its own fade timeline
           if(!this.memoryBubble){
             this.group.userData.bubble.material.opacity=0;
             const spr=makeBubbleSprite('i will remember this.');
             spr.material.opacity=0;
             spr.position.copy(this.group.localToWorld(new THREE.Vector3(0,0.9,0)));
             world.add(spr);
-            this.memoryBubble={sprite:spr, t:0}; // t = life seconds
+            this.memoryBubble={sprite:spr, t:0};
           }
 
-          // fade fish
           this.fade=Math.max(0,this.fade-dt*0.9);
           for(const m of this.group.userData.mats){ m.uniforms.uOpacity.value=this.fade; }
           this.group.userData.eyes.forEach(e=> e.material.opacity=this.fade);
 
-          // 2) memory bubble: fade-in -> linger -> fade-out always
+          // memory bubble timeline
           if(this.memoryBubble){
             const MB_IN=0.18, MB_LINGER=0.9, MB_OUT=0.8;
             this.memoryBubble.t+=dt;
@@ -299,7 +295,7 @@
 
     const FISH=[]; for(let i=0;i<TOTAL_FISH;i++) FISH.push(new Fish(i));
 
-    // random idle thoughts
+    // idle thoughts
     setInterval(()=>{
       const alive=FISH.filter(f=>f.group && !f.fading);
       if(!alive.length) return;
@@ -347,11 +343,10 @@
     }
     const SHARK=new Shark();
 
-    /* ===== 3) natural curved parallax via camera rig ===== */
+    /* ===== 2) Parallax: pivot AT CAMERA (rotate camera only) ===== */
     let mouseX=0; // -1..1
-    const yawRange=THREE.MathUtils.degToRad(8);  // how far we can look left/right
-    const lateral=0.6;                           // slight lateral slide for depth
-    const rollRange=THREE.MathUtils.degToRad(1.5);
+    const yawRange=THREE.MathUtils.degToRad(8);   // look left/right
+    const rollRange=THREE.MathUtils.degToRad(1.2);
     addEventListener('pointermove',(e)=>{
       mouseX = THREE.MathUtils.clamp((e.clientX/innerWidth)*2-1, -1, 1);
     });
@@ -377,19 +372,15 @@
     function tick(now){
       const dt=Math.min((now-last)/1000,0.05); last=now; const t=now*0.001;
 
-      // god rays drift
       for(const r of RAYS){ r.material.uniforms.uTime.value=t;
         r.position.x+=Math.sin(t*r.userData.speed+r.id)*0.0008;
         r.position.z+=Math.cos(t*r.userData.speed+r.id)*0.0006; }
 
-      // CURVED LOOK: rotate rig (yaw), slight roll, tiny lateral translation
-      const targetYaw = mouseX * yawRange;
-      const targetRoll = -mouseX * rollRange;            // subtle counter-roll
-      const targetX = Math.sin(targetYaw) * lateral;     // arc-based slide
-
-      rig.rotation.y = THREE.MathUtils.lerp(rig.rotation.y, targetYaw, 0.08);
-      rig.rotation.z = THREE.MathUtils.lerp(rig.rotation.z, targetRoll, 0.08);
-      rig.position.x = THREE.MathUtils.lerp(rig.position.x, targetX, 0.08);
+      // rotate the camera in place (pivot = camera). Right shows right.
+      const targetYaw  = mouseX * yawRange;
+      const targetRoll = -mouseX * rollRange;
+      camera.rotation.y = THREE.MathUtils.lerp(camera.rotation.y, targetYaw, 0.08);
+      camera.rotation.z = THREE.MathUtils.lerp(camera.rotation.z, targetRoll, 0.08);
 
       for(const f of FISH) f.update(dt,t);
       SHARK.update(dt,t);
