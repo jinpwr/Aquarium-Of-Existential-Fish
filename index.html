@@ -9,23 +9,21 @@
       height: 100%;
       margin: 0;
       overflow: hidden;
-      /* Realistic ocean gradient; JS will pulse brightness only (no hue shift) */
+      /* Realistic ocean gradient; JS pulses brightness only (no hue change) */
       background: linear-gradient(to bottom,
-        hsl(195 60% 34%) 0%,   /* green-blue near surface */
+        hsl(195 60% 34%) 0%,
         hsl(210 60% 22%) 45%,
-        hsl(220 60% 10%) 100%  /* dark navy depth */
+        hsl(220 60% 10%) 100%
       );
     }
     canvas { display:block }
 
-    /* film grain */
     #dither{
       position:fixed; inset:0; pointer-events:none; opacity:.12; z-index:2;
-      background-image:url('data:image/svg;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" fill="black" opacity="0"/><rect x="0" y="0" width="2" height="2" fill="white" opacity="0.07"/><rect x="2" y="2" width="2" height="2" fill="white" opacity="0.07"/></svg>');
+      background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" fill="black" opacity="0"/><rect x="0" y="0" width="2" height="2" fill="white" opacity="0.07"/><rect x="2" y="2" width="2" height="2" fill="white" opacity="0.07"/></svg>');
       image-rendering:pixelated; background-size:4px; background-repeat:repeat; mix-blend-mode:overlay;
     }
 
-    /* overlays */
     #overlay{
       position:fixed; inset:0; pointer-events:none; z-index:4;
       display:flex; align-items:flex-end; justify-content:flex-end;
@@ -52,9 +50,9 @@
   <script type="module">
     import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
 
-    /* ========== Scene & renderer ========== */
+    /* ===== Scene / Renderer ===== */
     const scene = new THREE.Scene();
-    const world = new THREE.Group();  // parallax root
+    const world = new THREE.Group();
     scene.add(world);
     scene.fog = new THREE.FogExp2(0x0e0a2a, 0.05);
 
@@ -70,22 +68,21 @@
     renderer.toneMappingExposure = 0.9;
     document.body.appendChild(renderer.domElement);
 
-    /* ========== Lighting (dramatic) ========== */
+    /* ===== Lights ===== */
     const hemi = new THREE.HemisphereLight(0xaad9ff, 0x0b0018, 0.35);
     const key  = new THREE.DirectionalLight(0xb0d6ff, 1.45); key.position.set(4, 6, 2);
     const fill = new THREE.DirectionalLight(0x66ffd2, 0.35);  fill.position.set(-5, 2, -3);
     const rim  = new THREE.DirectionalLight(0x8b86ff, 0.9);   rim.position.set(0, 3.5, -6);
     scene.add(hemi, key, fill, rim);
 
-    /* ========== Helpers ========== */
+    /* ===== Helpers ===== */
     const rand = (a,b)=> a + Math.random()*(b-a);
     const choose = arr => arr[(Math.random()*arr.length)|0];
 
-    /* ========== Ocean brightness pulsing (hue fixed) ========== */
+    /* ===== Ocean brightness pulsing (no hue shift) ===== */
     function updateBackground(nowMs){
       const t = nowMs * 0.001;
-      // brightness oscillation between -6%..+6% lightness, smooth
-      const k = Math.sin(t * 0.25) * 6; // %
+      const k = Math.sin(t * 0.25) * 6; // % lightness swing
       const L1 = 34 + k, L2 = 22 + k*0.8, L3 = 10 + k*0.6;
       document.body.style.background =
         `linear-gradient(to bottom,
@@ -95,7 +92,7 @@
         )`;
     }
 
-    /* ========== God rays (soft) ========== */
+    /* ===== Soft God Rays ===== */
     function makeGodRay(){
       const geo = new THREE.ConeGeometry(6.5, 16, 64, 1, true);
       geo.rotateX(-Math.PI/2);
@@ -135,7 +132,7 @@
     }
     const RAYS = []; for(let i=0;i<4;i++){ const r=makeGodRay(); RAYS.push(r); world.add(r); }
 
-    /* ========== Speech bubbles ========== */
+    /* ===== Speech bubbles ===== */
     function makeBubbleSprite(text){
       const w=256,h=128;
       const cvs=document.createElement('canvas'); cvs.width=w; cvs.height=h;
@@ -186,7 +183,7 @@
       for(const l of lines){ ctx.fillText(l,x,curY); curY+=lineHeight; }
     }
 
-    /* ========== Rainbow sheen palette (distinct per-fish) ========== */
+    /* ===== Rainbow sheen palette ===== */
     function hslToHex(h,s,l){
       const c=(1-Math.abs(2*l-1))*s, x=c*(1-Math.abs(((h*6)%2)-1)), m=l-c/2;
       let r=0,g=0,b=0;
@@ -203,25 +200,25 @@
       const arr=[];
       for(let i=0;i<n;i++){
         const h=i/n; // 0..1
-        const hex=hslToHex(h,0.85,0.55); // vivid but sits under tone mapping
+        const hex=hslToHex(h,0.85,0.55);
         arr.push(new THREE.Color(hex));
       }
       return arr;
     }
-    const RAINBOW_SHEENS = rainbowSheenList(32); // plenty to choose distinct ones
+    const RAINBOW_SHEENS = rainbowSheenList(32);
 
-    /* ========== Fish shader: fine sand grain (more grainy), dramatic light ========== */
+    /* ===== Fish shader: fine sand grain, dramatic light (FIX: declare cameraPosition) ===== */
     const FishSandMaterial = (sheenColor)=>{
       return new THREE.ShaderMaterial({
         transparent:true, depthWrite:true, fog:true,
         uniforms:{
-          uLightDir: { value: new THREE.Vector3().copy(key.position).normalize() },
-          uDark:     { value: new THREE.Color(0x0e0e18) },  // very dark base
+          uLightDir: { value: new THREE.Vector3().copy(key.position) }, // will normalize in shader
+          uDark:     { value: new THREE.Color(0x0e0e18) },
           uSheen:    { value: sheenColor.clone() },
           uOpacity:  { value: 1.0 },
           uTime:     { value: 0 },
-          uGrain:    { value: 110.0 },  // MORE grain
-          uSpecPow:  { value: 90.0 },   // tighter specular for punch
+          uGrain:    { value: 110.0 },
+          uSpecPow:  { value: 90.0 },
           uRimPow:   { value: 2.2 },
           uRimStr:   { value: 0.42 }
         },
@@ -245,6 +242,7 @@
           varying vec2 vUv;
           uniform vec3 uLightDir, uDark, uSheen;
           uniform float uOpacity, uTime, uGrain, uSpecPow, uRimPow, uRimStr;
+          uniform vec3 cameraPosition;     // <-- REQUIRED for ShaderMaterial
 
           float hash(vec3 p){
             p = fract(p * 0.3183099 + vec3(0.1,0.2,0.3));
@@ -254,15 +252,14 @@
           float grain(vec3 p){
             float g = hash(p*uGrain);
             g = mix(g, hash(p*uGrain*1.7), 0.5);
-            // add subtle time twinkle
             g = mix(g, hash(p*uGrain*2.3 + vec3(uTime)), 0.35);
             return g;
           }
 
           void main(){
             vec3 N = normalize(vN);
-            vec3 L = normalize(uLightDir);
-            vec3 V = normalize(cameraPosition - vW);
+            vec3 L = normalize(uLightDir - vW);      // use light POSITION → direction
+            vec3 V = normalize(cameraPosition - vW); // now valid
             vec3 H = normalize(L + V);
 
             float ndotl = max(dot(N,L), 0.0);
@@ -289,7 +286,7 @@
       });
     };
 
-    /* ========== UV helper ========== */
+    /* ===== UV helper ===== */
     function ensureSphericalUVs(geo){
       if(geo.attributes.uv) return;
       const pos = geo.attributes.position;
@@ -305,7 +302,7 @@
       geo.attributes.uv.needsUpdate = true;
     }
 
-    /* ========== Fish (tail fixed; pause → fade; bubble appears as it fades) ========== */
+    /* ===== Fish (tail fixed; rainbow hues; pause→fade with simultaneous memory bubble) ===== */
     const PHRASES = [
       'i am not real','today i forgot myself','be kind to the void','do fish dream?',
       '404: meaning not found','blink slowly','pretend to be water','becoming … becoming','a small thought floats'
@@ -326,33 +323,29 @@
       const bodyMat = FishSandMaterial(sheenColor);
       const body=new THREE.Mesh(bodyGeo, bodyMat); g.add(body);
 
-      // Tail: base attached at pivot; tip flails outward; no clipping
+      // Tail (base at pivot; tip flails outward)
       const tailLen = 0.42;
       const tailGeo=new THREE.ConeGeometry(0.20, tailLen, 7);
-      // Put base exactly at local origin; tip at +Y
-      tailGeo.translate(0, tailLen*0.5, 0);
+      tailGeo.translate(0, tailLen*0.5, 0);      // base at origin
       ensureSphericalUVs(tailGeo);
       const tailMat = FishSandMaterial(sheenColor);
       const tailMesh=new THREE.Mesh(tailGeo, tailMat);
 
       const tailPivot = new THREE.Group();
       tailPivot.add(tailMesh);
-      // Rotate so +Y (tail length) maps to -X (behind fish)
-      tailPivot.rotation.z = Math.PI/2; // +Y -> -X
-      // Attach pivot at left/back edge
+      tailPivot.rotation.z = Math.PI/2;          // +Y → -X
       const bodyMinX = -radius * sx;
       tailPivot.position.set(bodyMinX - 0.06, 0, 0);
       g.add(tailPivot);
 
       // Fins
       const finGeo=new THREE.ConeGeometry(0.08,0.18,7);
-      finGeo.translate(0, 0.09, 0); // base at origin
+      finGeo.translate(0, 0.09, 0);
       ensureSphericalUVs(finGeo);
       const finMat = FishSandMaterial(sheenColor);
       const finL=new THREE.Mesh(finGeo,finMat);
       const finR=new THREE.Mesh(finGeo,finMat.clone());
-      // rotate fins to stick out naturally
-      finL.rotation.z = -Math.PI/2.6; finR.rotation.z = -Math.PI/2.6; finR.rotation.y = Math.PI;
+      finL.rotation.z=-Math.PI/2.6; finR.rotation.z=-Math.PI/2.6; finR.rotation.y=Math.PI;
       finL.position.set(0.10,-0.05, 0.16);
       finR.position.set(0.10,-0.05,-0.16);
       g.add(finL,finR);
@@ -363,7 +356,7 @@
       const eyeL=new THREE.Mesh(eyeGeo,eyeMat), eyeR=new THREE.Mesh(eyeGeo,eyeMat);
       eyeL.position.set(0.42,0.06,0.12); eyeR.position.set(0.42,0.06,-0.12); g.add(eyeL,eyeR);
 
-      // Bubble
+      // Thought bubble
       const bubble=makeBubbleSprite(choose(PHRASES)); bubble.position.set(0,0.9,0); g.add(bubble);
 
       g.userData = {
@@ -388,7 +381,7 @@
         this.fade = 1.0;
         this.pauseTimer = 0;
 
-        this.memBubble = null; // will be created as soon as fading begins
+        this.memBubble = null; // spawned as fading starts
       }
       update(dt, t){
         if(!this.group) return;
@@ -396,14 +389,13 @@
         if(this.paused && !this.fading){
           this.pauseTimer += dt;
           if(this.pauseTimer >= 0.35){
-            // start fading AND create memory bubble immediately (appears as it fades)
             this.fading = true;
             if(!this.memBubble){
               const bubblePos = this.group.localToWorld(new THREE.Vector3(0,0.9,0));
               const mem = makeBubbleSprite('i will remember this.');
               mem.position.copy(bubblePos);
               world.add(mem);
-              this.memBubble = mem; // keep until we remove fish; bubble will fade later on its own
+              this.memBubble = mem;
             }
           }
         }
@@ -428,20 +420,16 @@
           this.group.quaternion.slerp(targetQuat, 0.08);
         }
 
-        // tail wag (pivot), no clipping; fins wiggle unless paused
         const wag = Math.sin(t*6.0 + this.phase) * 0.35;
         this.group.userData.tailPivot.rotation.y = this.paused ? 0 : wag;
         this.group.userData.fins.forEach((fin,i)=>{
           fin.rotation.y = this.paused ? 0 : Math.sin(t*5.5 + this.phase + i)*0.12;
         });
 
-        // bubble faces camera
         this.group.userData.bubble.lookAt(camera.position);
 
-        // shader time
         for(const m of this.group.userData.mats){ m.uniforms.uTime.value = t; }
 
-        // fading (fish + eyes + its bubble together)
         if(this.fading){
           this.fade = Math.max(0, this.fade - dt*0.6);
           for(const m of this.group.userData.mats){ m.uniforms.uOpacity.value = this.fade; }
@@ -449,13 +437,11 @@
           this.group.userData.eyes.forEach(e=>{ e.material.opacity = this.fade; });
 
           if(this.fade<=0.0){
-            // cleanup fish
             world.remove(this.group);
             this.group.traverse(o=>{
               if(o.material){ o.material.dispose?.(); if(o.material.map) o.material.map.dispose?.(); }
               if(o.geometry){ o.geometry.dispose?.(); }
             });
-            // Let the memory bubble linger then fade out gently (no movement)
             if(this.memBubble){
               const start = performance.now(), wait = 800, fadeDur = 1300;
               const tickMem = (now)=>{
@@ -476,11 +462,11 @@
       triggerFade(){ if(!this.fading && this.group) this.paused = true; }
     }
 
-    // Build a school with DISTINCT rainbow hues
+    // School with DISTINCT rainbow hues
     const FISH=[];
     const count = 24;
     for(let i=0;i<count;i++){
-      const sheen = RAINBOW_SHEENS[i % RAINBOW_SHEENS.length]; // cycle through rainbow
+      const sheen = RAINBOW_SHEENS[i % RAINBOW_SHEENS.length];
       FISH.push(new Fish(sheen));
     }
 
@@ -492,7 +478,7 @@
       if (f) updateBubbleText(f.group.userData.bubble, choose(PHRASES));
     }, 2000);
 
-    /* ========== Sparkling water bubbles (lit) ========== */
+    /* ===== Sparkling water bubbles (lit) ===== */
     const bubbleCount=260;
     const bubbleGeo=new THREE.BufferGeometry();
     const positions=new Float32Array(bubbleCount*3);
@@ -511,22 +497,19 @@
       transparent:true, depthWrite:false, blending:THREE.AdditiveBlending,
       uniforms:{
         uTime:{value:0},
-        uLightDir:{value:new THREE.Vector3().copy(key.position).normalize()},
+        uLightDir:{value:key.position.clone()},
         uBase:{value:new THREE.Color(0xdff9ff)},
         uSpec:{value:new THREE.Color(0xffffff)}
       },
       vertexShader:/*glsl*/`
         precision highp float;
-        attribute vec3 position;
         uniform mat4 modelViewMatrix;
         uniform mat4 projectionMatrix;
-        uniform float uTime;
         varying vec3 vWorldPos;
         void main(){
-          // float and drift handled on CPU; just pass position
           vWorldPos = position;
           vec4 mv = modelViewMatrix * vec4(position,1.0);
-          gl_PointSize = 3.5 * (300.0 / -mv.z); // size attenuation
+          gl_PointSize = 3.5 * (300.0 / -mv.z);
           gl_Position = projectionMatrix * mv;
         }
       `,
@@ -538,21 +521,19 @@
         uniform float uTime;
         varying vec3 vWorldPos;
 
-        // Point sprite shading: treat each point as a tiny sphere
         void main(){
-          vec2 uv = gl_PointCoord * 2.0 - 1.0; // -1..1
+          vec2 uv = gl_PointCoord * 2.0 - 1.0;
           float r2 = dot(uv,uv);
           if(r2 > 1.0) discard;
-          float z = sqrt(1.0 - r2); // hemisphere normal z
+          float z = sqrt(1.0 - r2);
           vec3 N = normalize(vec3(uv.x, uv.y, z));
-          vec3 L = normalize(uLightDir);
-          vec3 V = vec3(0.0,0.0,1.0); // toward camera in sprite space
+          vec3 L = normalize(uLightDir - vWorldPos);
+          vec3 V = vec3(0.0,0.0,1.0);
           vec3 H = normalize(L + V);
 
           float diff = max(dot(N,L), 0.0);
           float spec = pow(max(dot(N,H), 0.0), 64.0);
 
-          // tiny twinkle
           float tw = 0.5 + 0.5*sin(dot(vWorldPos, vec3(0.7,1.1,1.3))*2.0 + uTime*3.0);
 
           vec3 col = uBase * (0.15 + 0.85*diff) * (0.6 + 0.4*tw) + uSpec * spec;
@@ -578,7 +559,7 @@
       bubbleGeo.attributes.position.needsUpdate=true;
     }
 
-    /* ========== Shark (visible & unfogged) ========== */
+    /* ===== Shark (visible & unfogged) ===== */
     const SHARK_SRC='shark.png';
     class Shark {
       constructor(){
@@ -610,7 +591,7 @@
     }
     const SHARK = new Shark();
 
-    /* ========== Curved pan (OUTWARD: more natural look-around) ========== */
+    /* ===== Curved pan (outward) ===== */
     let mouseX = 0; // -1..1
     const panRange = 1.25;
     const yawRange = THREE.MathUtils.degToRad(7);
@@ -619,7 +600,7 @@
       mouseX = THREE.MathUtils.clamp(nx, -1, 1);
     });
 
-    /* ========== Click-to-pause-then-fade ========== */
+    /* ===== Click-to-pause-then-fade ===== */
     const ray = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
     addEventListener('pointerdown', (e)=>{
@@ -637,14 +618,30 @@
       }
     });
 
-    /* ========== Resize ========== */
+    /* ===== Build school (distinct rainbow hues) ===== */
+    const FISH=[];
+    const count = 24;
+    for(let i=0;i<count;i++){
+      const sheen = RAINBOW_SHEENS[i % RAINBOW_SHEENS.length];
+      FISH.push(new Fish(sheen));
+    }
+
+    /* ===== Random thoughts ===== */
+    setInterval(()=>{
+      const alive = FISH.filter(f=>f.group && !f.fading);
+      if(!alive.length) return;
+      const f = choose(alive);
+      if (f) updateBubbleText(f.group.userData.bubble, choose(PHRASES));
+    }, 2000);
+
+    /* ===== Resize ===== */
     addEventListener('resize', ()=>{
       camera.aspect = innerWidth/innerHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(innerWidth, innerHeight);
     });
 
-    /* ========== Animate ========== */
+    /* ===== Animate ===== */
     let last = performance.now();
     function tick(now){
       const dt = Math.min((now - last)/1000, 0.05); last = now;
@@ -658,7 +655,6 @@
         r.position.z += Math.cos(t * r.userData.speed + r.id)*0.0006;
       }
 
-      // OUTWARD curve: push world x with +sin, rotate in same direction
       const targetX = Math.sin(mouseX * Math.PI/2) * panRange;
       world.position.x = THREE.MathUtils.lerp(world.position.x, targetX, 0.1);
       const targetYaw = mouseX * yawRange;
