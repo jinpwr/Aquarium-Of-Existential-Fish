@@ -207,12 +207,12 @@
     }
     const RAINBOW_SHEENS = rainbowSheenList(32);
 
-    /* ===== Fish shader: fine sand grain, dramatic light (declares cameraPosition) ===== */
+    /* ===== Fish shader: sand grain + dramatic light (no cameraPosition redeclare) ===== */
     const FishSandMaterial = (sheenColor)=>{
       return new THREE.ShaderMaterial({
         transparent:true, depthWrite:true, fog:true,
         uniforms:{
-          uLightDir: { value: key.position.clone() }, // use light position
+          uLightPos: { value: key.position.clone() }, // pass light position
           uDark:     { value: new THREE.Color(0x0e0e18) },
           uSheen:    { value: sheenColor.clone() },
           uOpacity:  { value: 1.0 },
@@ -240,9 +240,9 @@
           varying vec3 vN;
           varying vec3 vW;
           varying vec2 vUv;
-          uniform vec3 uLightDir, uDark, uSheen;
+          uniform vec3 uLightPos, uDark, uSheen;
           uniform float uOpacity, uTime, uGrain, uSpecPow, uRimPow, uRimStr;
-          uniform vec3 cameraPosition;
+          // NOTE: cameraPosition is provided by Three.js automatically.
 
           float hash(vec3 p){
             p = fract(p * 0.3183099 + vec3(0.1,0.2,0.3));
@@ -258,13 +258,12 @@
 
           void main(){
             vec3 N = normalize(vN);
-            vec3 L = normalize(uLightDir - vW);      // light position → direction
+            vec3 L = normalize(uLightPos - vW);
             vec3 V = normalize(cameraPosition - vW);
             vec3 H = normalize(L + V);
 
             float ndotl = max(dot(N,L), 0.0);
             float diffuse = pow(ndotl, 1.25);
-
             float spec = pow(max(dot(N,H), 0.0), uSpecPow);
             float rim = pow(1.0 - max(dot(N,V), 0.0), uRimPow) * uRimStr;
 
@@ -326,7 +325,7 @@
       // Tail (base at pivot; tip flails outward)
       const tailLen = 0.42;
       const tailGeo=new THREE.ConeGeometry(0.20, tailLen, 7);
-      tailGeo.translate(0, tailLen*0.5, 0);      // base at origin
+      tailGeo.translate(0, tailLen*0.5, 0);
       ensureSphericalUVs(tailGeo);
       const tailMat = FishSandMaterial(sheenColor);
       const tailMesh=new THREE.Mesh(tailGeo, tailMat);
@@ -481,7 +480,7 @@
       transparent:true, depthWrite:false, blending:THREE.AdditiveBlending,
       uniforms:{
         uTime:{value:0},
-        uLightDir:{value:key.position.clone()},
+        uLightPos:{value:key.position.clone()},
         uBase:{value:new THREE.Color(0xdff9ff)},
         uSpec:{value:new THREE.Color(0xffffff)}
       },
@@ -499,7 +498,7 @@
       `,
       fragmentShader:/*glsl*/`
         precision highp float;
-        uniform vec3 uLightDir;
+        uniform vec3 uLightPos;
         uniform vec3 uBase;
         uniform vec3 uSpec;
         uniform float uTime;
@@ -511,7 +510,7 @@
           if(r2 > 1.0) discard;
           float z = sqrt(1.0 - r2);
           vec3 N = normalize(vec3(uv.x, uv.y, z));
-          vec3 L = normalize(uLightDir - vWorldPos);
+          vec3 L = normalize(uLightPos - vWorldPos);
           vec3 V = vec3(0.0,0.0,1.0);
           vec3 H = normalize(L + V);
 
@@ -530,7 +529,7 @@
     });
 
     const bubbles=new THREE.Points(bubbleGeo,bubbleMat); world.add(bubbles);
-    function updateBubbles(dt){
+    function updateBubbles(dt, t){
       const arr=bubbleGeo.attributes.position.array;
       for(let i=0;i<bubbleCount;i++){
         let x=arr[i*3+0], y=arr[i*3+1], z=arr[i*3+2];
@@ -541,7 +540,7 @@
         arr[i*3+0]=x; arr[i*3+1]=y; arr[i*3+2]=z;
       }
       bubbleGeo.attributes.position.needsUpdate=true;
-      bubbleMat.uniforms.uTime.value = (performance.now()*0.001);
+      bubbleMat.uniforms.uTime.value = t;
     }
 
     /* ===== Shark (visible & unfogged) ===== */
@@ -647,7 +646,7 @@
 
       for(const f of FISH) f.update(dt, t);
       SHARK.update(dt,t);
-      updateBubbles(dt); // single definition used
+      updateBubbles(dt, t);
 
       renderer.render(scene, camera);
       requestAnimationFrame(tick);
